@@ -1,0 +1,553 @@
+<title>스쿠버존 시트 가이드</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  /* 레이아웃: 상단 고정 바 + 왼쪽 목차 + 오른쪽 본문. 톤: 모던 SaaS 문서 사이트 느낌의 청록 */
+  :root{
+    --bg:#FFFFFF; --surface:#FFFFFF; --surface-2:#F6F8FA;
+    --ink:#101828; --muted:#64748B; --line:#E6E9EE;
+    --accent:#0D9488; --accent-ink:#0F766E; --accent-bg:#F0FDFA; --accent-strong:#0B5F57;
+    --warn:#B3261E; --warn-bg:#FEF3F2; --warn-line:#F9D2CE;
+    --tip-bg:#F0FBF2; --tip-line:#C8EBCB; --tip-ink:#1E6B33;
+    --shadow: 0 1px 2px rgba(16,24,40,.04), 0 10px 28px -18px rgba(16,24,40,.18);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0B0F14; --surface:#101722; --surface-2:#141D29;
+      --ink:#EEF2F6; --muted:#8C9BAE; --line:#223041;
+      --accent:#2DD4BF; --accent-ink:#7EEDE0; --accent-bg:#0E2E2C; --accent-strong:#9FF3E6;
+      --warn:#FF8A80; --warn-bg:#2A1512; --warn-line:#4A231D;
+      --tip-bg:#0F2417; --tip-line:#1F4A2E; --tip-ink:#8CE3A4;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0B0F14; --surface:#101722; --surface-2:#141D29;
+    --ink:#EEF2F6; --muted:#8C9BAE; --line:#223041;
+    --accent:#2DD4BF; --accent-ink:#7EEDE0; --accent-bg:#0E2E2C; --accent-strong:#9FF3E6;
+    --warn:#FF8A80; --warn-bg:#2A1512; --warn-line:#4A231D;
+    --tip-bg:#0F2417; --tip-line:#1F4A2E; --tip-ink:#8CE3A4;
+    color-scheme: dark;
+  }
+
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:'IBM Plex Sans KR',-apple-system,'Apple SD Gothic Neo',sans-serif;
+    font-size:15.5px; line-height:1.68; -webkit-font-smoothing:antialiased;
+    padding-left:max(16px, env(safe-area-inset-left,0px));
+    padding-right:max(16px, env(safe-area-inset-right,0px));
+  }
+  h1,h2,h3{font-family:inherit; font-weight:700; text-wrap:balance; color:var(--ink); letter-spacing:-.01em}
+  a{color:var(--accent-ink)}
+  code,kbd{font-family:'IBM Plex Mono',ui-monospace,Menlo,monospace; font-weight:500; background:var(--surface-2); border:1px solid var(--line); border-radius:5px; padding:.1em .45em; font-size:.88em}
+
+  /* 상단 고정 바 */
+  .topbar{
+    position:sticky; top:0; z-index:20; display:flex; align-items:center; gap:12px;
+    padding:14px max(16px, env(safe-area-inset-left,0px)); margin:0 calc(-1 * max(16px, env(safe-area-inset-left,0px)));
+    background:color-mix(in srgb, var(--bg) 86%, transparent); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--line);
+  }
+  .topbar .mark{
+    width:30px;height:30px;border-radius:9px;background:linear-gradient(155deg,var(--accent),var(--accent-strong));
+    display:flex;align-items:center;justify-content:center;flex:none;
+  }
+  .topbar .mark svg{width:17px;height:17px}
+  .topbar strong{font-size:.95rem; font-weight:700}
+  .topbar span{color:var(--muted); font-size:.82rem}
+  .topbar .sep{color:var(--line)}
+
+  .wrap{max-width:1080px; margin:0 auto; padding-block:36px 90px}
+
+  .hero{margin-bottom:34px; max-width:68ch}
+  .hero .eyebrow{display:inline-flex; align-items:center; gap:6px; font-family:'IBM Plex Mono',monospace; font-size:.74rem; font-weight:600; letter-spacing:.06em; color:var(--accent-ink); background:var(--accent-bg); padding:4px 10px; border-radius:7px; margin-bottom:14px}
+  .hero h1{font-size:2rem; margin:0 0 10px; line-height:1.2}
+  .hero p{margin:0; color:var(--muted); font-size:1.02rem}
+
+  .layout{display:grid; grid-template-columns: 232px minmax(0,1fr); gap:40px; align-items:start}
+  @media (max-width:760px){ .layout{grid-template-columns:1fr} }
+
+  nav.toc{
+    position:sticky; top:66px; background:transparent; padding:0 0 0 2px; border-left:1px solid var(--line);
+  }
+  @media (max-width:760px){ nav.toc{position:static; border-left:0; border:1px solid var(--line); border-radius:12px; padding:14px; background:var(--surface-2)} }
+  nav.toc .eyebrow{font-size:.68rem; letter-spacing:.1em; color:var(--muted); font-weight:600; margin:0 0 10px; padding-left:16px; text-transform:uppercase; font-family:'IBM Plex Mono',monospace}
+  nav.toc ol{list-style:none; margin:0; padding:0; counter-reset:toc}
+  nav.toc li{counter-increment:toc}
+  nav.toc a{
+    display:flex; gap:10px; align-items:baseline; padding:7px 8px 7px 14px; margin-left:-1px; border-left:2px solid transparent;
+    text-decoration:none; color:var(--muted); font-size:.87rem; font-weight:500; transition:color .12s,border-color .12s;
+  }
+  nav.toc a:hover{color:var(--ink)}
+  nav.toc a:hover, nav.toc a:focus-visible{border-left-color:var(--line)}
+  nav.toc a::before{content:counter(toc,decimal-leading-zero); font-family:'IBM Plex Mono',monospace; color:var(--muted); font-weight:500; font-size:.76rem; flex:none}
+
+  main section{scroll-margin-top:76px; margin-bottom:52px; padding-top:6px}
+  main section > .tag{
+    display:inline-flex; align-items:center; gap:6px; font-family:'IBM Plex Mono',monospace; font-size:.72rem; font-weight:600; letter-spacing:.05em;
+    color:var(--accent-ink); margin-bottom:10px;
+  }
+  main section > .tag::before{content:""; width:6px; height:6px; border-radius:50%; background:var(--accent)}
+  main h2{font-size:1.44rem; margin:0 0 8px}
+  main .lede{color:var(--muted); margin:0 0 22px; font-size:1rem; max-width:62ch}
+
+  .card{background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:20px 22px; margin-bottom:14px; transition:border-color .15s, box-shadow .15s}
+  .card:hover{border-color:color-mix(in srgb, var(--accent) 35%, var(--line)); box-shadow:var(--shadow)}
+  .card h3{font-size:1rem; margin:0 0 10px; display:flex; align-items:center; gap:8px}
+  .card h3 .emoji{font-size:1.05em}
+
+  .steps{list-style:none; margin:0; padding:0; counter-reset:step; border-left:1px solid var(--line); margin-left:5px}
+  .steps > li{counter-increment:step; position:relative; padding:0 0 16px 28px}
+  .steps > li:last-child{padding-bottom:0}
+  .steps > li::before{
+    content:counter(step,decimal-leading-zero); position:absolute; left:-11px; top:-1px; width:20px; text-align:center;
+    background:var(--surface); font-family:'IBM Plex Mono',monospace; color:var(--accent-ink); font-weight:600; font-size:.74rem;
+  }
+  .steps b{color:var(--ink); font-weight:600}
+
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:14px}
+  @media (max-width:620px){ .grid2{grid-template-columns:1fr} }
+
+  .btn-chip{
+    display:inline-flex; align-items:center; gap:6px; font-weight:600; font-size:.85rem; color:var(--accent-strong);
+    background:var(--accent-bg); border:1px solid color-mix(in srgb, var(--accent) 30%, transparent); padding:3px 10px; border-radius:7px;
+  }
+  table{width:100%; border-collapse:collapse; font-size:.9rem}
+  th,td{text-align:left; padding:10px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+  th{color:var(--muted); font-weight:600; font-size:.74rem; text-transform:uppercase; letter-spacing:.04em; font-family:'IBM Plex Mono',monospace}
+  tr:last-child td{border-bottom:0}
+  .tblwrap{overflow-x:auto; border:1px solid var(--line); border-radius:12px}
+  .tblwrap table{margin:0}
+  .tblwrap th,.tblwrap td{border-bottom:1px solid var(--line)}
+  .tblwrap tr:last-child td{border-bottom:0}
+
+  .tip, .warn{border-radius:10px; padding:13px 16px 13px 42px; margin:14px 0; border:1px solid; font-size:.9rem; position:relative}
+  .tip{background:var(--tip-bg); border-color:var(--tip-line); color:var(--tip-ink)}
+  .warn{background:var(--warn-bg); border-color:var(--warn-line); color:var(--warn)}
+  .tip b, .warn b{color:inherit}
+  .tip::before, .warn::before{position:absolute; left:14px; top:13px}
+  .tip::before{content:"💡"}
+  .warn::before{content:"⚠️"}
+
+  .shot{
+    border:1.5px dashed var(--line); border-radius:12px; padding:30px 16px; text-align:center; color:var(--muted);
+    background:var(--surface-2); font-size:.83rem; margin:14px 0;
+  }
+  .shot b{display:block; color:var(--ink); font-size:.88rem; margin-bottom:3px; font-weight:600}
+  .shot img{max-width:100%; border-radius:8px; display:block; margin:0 auto}
+
+  details{background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:2px 18px; margin-bottom:8px}
+  details summary{cursor:pointer; padding:15px 0; font-weight:600; font-size:.98rem; list-style:none; display:flex; align-items:center; gap:10px}
+  details summary::-webkit-details-marker{display:none}
+  details summary::before{content:"+"; color:var(--accent-ink); font-family:'IBM Plex Mono',monospace; font-weight:600; width:1em}
+  details[open] summary::before{content:"–"}
+  details .inner{padding-bottom:16px; color:var(--muted)}
+
+  footer{margin-top:60px; padding-top:20px; border-top:1px solid var(--line); color:var(--muted); font-size:.82rem; text-align:center; font-family:'IBM Plex Mono',monospace}
+</style>
+
+<div class="topbar">
+  <div class="mark"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 17c1.5 1.3 3 1.3 4.5 0s3-1.3 4.5 0 3 1.3 4.5 0 3-1.3 4.5 0" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="7" r="2.6" stroke="#fff" stroke-width="1.8"/></svg></div>
+  <strong>스쿠버존 다합</strong><span class="sep">/</span><span>시트 가이드</span>
+</div>
+
+<div class="wrap">
+
+  <div class="hero">
+    <span class="eyebrow">OPERATIONS GUIDE</span>
+    <h1>스쿠버존 다합 · 시트 사용 가이드</h1>
+    <p>회원 관리 · 스케줄 · 패키지 · 이론교육 시트를 처음 쓰는 분을 위한 운영 매뉴얼이에요. 왼쪽 목차에서 바로 원하는 항목으로 이동할 수 있어요.</p>
+  </div>
+
+  <div class="layout">
+    <nav class="toc">
+      <p class="eyebrow">목차</p>
+      <ol>
+        <li><a href="#overview">할 수 있는 일</a></li>
+        <li><a href="#newmember">새 손님 등록</a></li>
+        <li><a href="#members">회원관리</a></li>
+        <li><a href="#daily">스케줄 만들기</a></li>
+        <li><a href="#addentry">일정 직접 추가</a></li>
+        <li><a href="#package">패키지 관리</a></li>
+        <li><a href="#theory">이론교육 리스트</a></li>
+        <li><a href="#permit">Permit 명단</a></li>
+        <li><a href="#mistakes">자주 하는 실수</a></li>
+        <li><a href="#trouble">문제 생겼을 때</a></li>
+      </ol>
+    </nav>
+
+    <main>
+
+      <section id="overview">
+        <span class="tag">시작하기 전에</span>
+        <h2>이 시트로 할 수 있는 일</h2>
+        <p class="lede">탭이 여러 개라 복잡해 보이지만, 결국 이 시트가 해주는 일은 아래 6가지예요. 각 작업이 어느 탭에서 일어나는지도 같이 적어뒀어요.</p>
+        <div class="grid2">
+          <div class="card">
+            <h3><span class="emoji">📝</span>손님 등록 처리하기</h3>
+            <p>손님이 등록 폼을 작성하면 <code>폼 응답</code>에 쌓이고, 확인 후 체크 한 번으로 <code>활성 회원</code>에 등록 + 일정까지 자동으로 들어가요.</p>
+          </div>
+          <div class="card">
+            <h3><span class="emoji">🗓️</span>매일 다이빙 스케줄 짜고 공유하기</h3>
+            <p><code>일정</code>에 쌓인 그날 예약을 모아서 <code>홈</code>에서 표 · 스태프용/손님용 이미지로 한 번에 만들어요.</p>
+          </div>
+          <div class="card">
+            <h3><span class="emoji">☎️</span>전화 · 카톡 신청 바로 넣기</h3>
+            <p>폼을 안 거친 신청도 <code>홈</code>의 "＋ 신청 추가"로 바로 <code>일정</code>에 넣을 수 있어요.</p>
+          </div>
+          <div class="card">
+            <h3><span class="emoji">🎟️</span>패키지 횟수 자동 관리</h3>
+            <p><code>패키지</code>에 등록해두면 펀다이빙할 때마다 자동으로 횟수가 깎이고, 스케줄표에 바로 표시돼요.</p>
+          </div>
+          <div class="card">
+            <h3><span class="emoji">📚</span>이론교육 발송 시기 챙기기</h3>
+            <p>오픈워터 · 어드밴스드 일정이 잡힌 손님을(재신청이든 처음이든) <code>이론교육</code>이 자동으로 찾아내서 보낼 시기를 알려줘요.</p>
+          </div>
+          <div class="card">
+            <h3><span class="emoji">📄</span>Permit 명단 뽑기</h3>
+            <p>그날 다이빙하는 손님들의 여권정보 명단을 <code>Permit</code> · <code>Boat Permit</code>에서 엑셀로 바로 받아요.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="newmember">
+        <span class="tag">신규 등록</span>
+        <h2>새 손님 등록하기 (폼)</h2>
+        <p class="lede">손님이 등록 폼을 작성해도 <b>자동으로 회원이 되지는 않아요</b>. 꼭 한 번 확인하고 활성화해줘야 해요.</p>
+        <div class="card">
+          <h3><span class="emoji">📋</span>방법 1 — 홈 탭 "대기중인 폼 신청" (추천)</h3>
+          <p>홈 탭 <span class="btn-chip">대기중인 폼 신청</span>을 누르면, 아직 활성화 안 한 신청만 이름 · 신청 종류 · 첫 일정 · 연락처 요약으로 모아서 보여줘요. 카드 옆 <b>활성화</b> 버튼 하나로 바로 등록돼요.</p>
+          <div class="shot"><img src="guide_images/245026645163131d7c141718ebd93094.png" alt="대기중인 폼 신청 다이얼로그 — 손님별 카드와 활성화 버튼"></div>
+          <div class="tip">여러 명을 연달아 활성화해도 회원번호가 겹치지 않도록 안전장치가 들어가 있어요 — 순서대로 눌러주시면 돼요.</div>
+        </div>
+        <div class="card">
+          <h3><span class="emoji">📝</span>방법 2 — 폼 응답 탭에서 직접</h3>
+          <ul class="steps">
+            <li>폼 제출이 들어오면 <b>폼 응답</b> 탭 맨 아래 새 줄이 생겨요</li>
+            <li>내용 확인 — 여권 사본 · 자격증 · 증명사진 링크, 교육이면 과정 선택도 확인</li>
+            <li>맨 오른쪽 <b>활성화</b> 체크박스를 누르면 → 회원 명단에 자동 등록 + 일정 탭에 첫 날짜 일정까지 자동으로 들어가요</li>
+            <li>"등록 결과" 칸에 회원번호 · 성공/실패가 표시돼요. 실패했으면 빨간 글씨 이유를 보고 다시 시도</li>
+          </ul>
+          <div class="shot"><img src="guide_images/274d03de8c6b2ed6bf1e2e0555432530.png" alt="폼 응답 탭의 활성화 체크박스 · 등록 결과 칸"></div>
+        </div>
+        <div class="card">
+          <h3><span class="emoji">📚</span>교육 과정을 여러 개 체크했을 때</h3>
+          <p>폼의 "교육 과정"은 체크박스라 한 손님이 여러 개를 한 번에 신청할 수 있어요. 고른 과정에 따라 처리 방식이 둘로 나뉘어요.</p>
+          <div class="grid2">
+            <div>
+              <p><b>① 순서 있는 과정</b> — 오픈워터 · 오픈워터+어드밴스드 · 어드밴스드 · EFR · 레스큐</p>
+              <p>신청한 날짜부터 <b>레벨 순서대로 날짜를 이어 붙여서</b> 전부 날짜 있는 진짜 일정으로 들어가요. 한 과정이 끝난 바로 다음 날부터 다음 과정이 시작돼요.</p>
+            </div>
+            <div>
+              <p><b>② 날짜 미확정 과정</b> — 마스터(DMT) · 인스트럭터(IDC) · 스페셜티 · 트레이닝</p>
+              <p>며칠짜리인지 정해진 게 아니라서 자동으로 이어 붙이지 않아요. 신청한 희망 시작일만 찍어서 <b>진한 노란색</b>으로 들어가요 — 날짜가 맞는지 확인하고 필요하면 고쳐주세요.</p>
+            </div>
+          </div>
+          <div class="tblwrap">
+            <table>
+              <tr><th>과정</th><th>일정 일수</th><th>처리 방식</th></tr>
+              <tr><td>오픈워터</td><td>3일</td><td rowspan="5">① 순서대로 날짜 이어 붙임</td></tr>
+              <tr><td>오픈워터 + 어드밴스드</td><td>5일</td></tr>
+              <tr><td>어드밴스드</td><td>2일</td></tr>
+              <tr><td>EFR</td><td>1일</td></tr>
+              <tr><td>레스큐</td><td>2일</td></tr>
+              <tr><td>세미 오픈워터</td><td>1일</td><td>① 취급(다른 순서 과정과 같이 신청 시 이어 붙음)</td></tr>
+              <tr><td>마스터(다이브마스터) · 인스트럭터(IDC)</td><td>1일</td><td rowspan="2">② 희망일만 표시, 확인 필요</td></tr>
+              <tr><td>스페셜티(Deep·Nitrox) · 트레이닝(Kick·SMB·Buoyancy)</td><td>1일</td></tr>
+            </table>
+          </div>
+          <p class="lede" style="margin:10px 0 0">예시: 오픈워터(3일) + EFR(1일) + 레스큐(2일) + 스페셜티·Deep(1일)를 11/20에 같이 신청하면 → 오픈워터 11/20~22, EFR 11/23, 레스큐 11/24~25까지 자동으로 날짜가 들어가고, 스페셜티·Deep만 11/20 날짜로 찍힌 채 노란색으로 표시돼서 확인이 필요해요.</p>
+        </div>
+        <div class="card">
+          <h3><span class="emoji">🤿</span>펀다이빙 · 체험다이빙 신청은 어떻게 처리되나요</h3>
+          <p>교육과 달리 이쪽은 <b>날짜 하나(신청일)에 줄 1개</b>만 만들어져요. 시간 · 사이트는 아직 안 정했으니 비워 두고 "시간 정하기" 메모만 남겨요 — 나중에 "＋ 신청 추가"처럼 일정 탭에서 직접 채워주면 돼요.</p>
+          <div class="tblwrap">
+            <table>
+              <tr><th>신청 종류</th><th>일정 탭에 들어가는 내용</th></tr>
+              <tr><td>펀다이빙 (일별 신청)</td><td>Fun Diving 1줄 (사이트 미정)</td></tr>
+              <tr><td>펀다이빙 (패키지 혜택 신청)</td><td>Fun Diving 1줄 + <b>패키지 탭에 자동 등록</b>(그 날 시작, 사용 0회) — 이후 펀다이빙할 때마다 패키지 탭이 알아서 횟수를 세요</td></tr>
+              <tr><td>펀다이빙 (체크다이빙)</td><td>Check Diving 1줄 (사이트 미정)</td></tr>
+              <tr><td>체험다이빙</td><td>DSD 1줄</td></tr>
+            </table>
+          </div>
+          <div class="tip">위 네 종류 중 아무거나 신청할 때 <b>🌙 나이트다이빙도 희망한다고</b> 체크하면, Night Diving 줄이 하나 더 추가되고 회원 메모에 "🌙 나이트다이빙 신청 — 손님 컨택 필요"라고 강조돼서 남아요. 연락해서 날짜를 정해주세요.</div>
+          <div class="tip">"Fun Diving" · "Check Diving" · "Night Diving"처럼 <b>다이빙 사이트가 아직 진짜 사이트가 아니라 기본값으로 들어간 줄</b>은 일정 탭에서 <b>진한 노란색</b>으로 표시돼요 — 교육의 "날짜 확인 필요" 줄이랑 같은 색이에요. 노란 줄을 보면 사이트 · 시간을 채워 넣어야 한다는 뜻이에요.</div>
+        </div>
+      </section>
+
+      <section id="members">
+        <span class="tag">회원관리</span>
+        <h2>회원관리</h2>
+        <p class="lede">회원은 <code>활성 회원</code> · <code>비활성 회원</code> 두 탭에 나뉘어 있어요. 오래 안 온 손님은 비활성으로 넘어가고, 상태(O열)를 바꾸면 자동으로 다른 탭 맨 위로 옮겨가요.</p>
+        <div class="card">
+          <h3><span class="emoji">🔍</span>회원 찾기</h3>
+          <p>홈 탭 <span class="btn-chip">회원 찾기</span> 또는 메뉴 <b>스쿠버존 → 회원 찾기</b>. 이름 · 영문 · 회원번호 아무거나 입력하면 활성 · 비활성 둘 다 같이 찾아줘요. 검색 결과 줄마다 <span class="btn-chip">시트에서 보기</span>로 바로 이동할 수 있고, <b>활성화 · 비활성화 버튼도 같이 있어서</b> 여기서 바로 상태를 바꿀 수도 있어요.</p>
+          <div class="shot"><img src="guide_images/1119042c66f7dbd3ff4158a6d07805cc.png" alt="회원 찾기 결과 — 이름으로 검색하면 활성 · 비활성 회원이 같이 뜨고, 각 줄에 활성화 · 비활성화 · 시트에서 보기 버튼이 있음"></div>
+        </div>
+        <div class="card">
+          <h3><span class="emoji">🔁</span>회원 활성화 · 비활성화하기</h3>
+          <p>오래 연락이 없는 손님은 <b>비활성</b>으로 넘겨서 활성 회원 탭을 깔끔하게 유지해요. 다시 오면 <b>활성화</b>로 되돌리면 돼요. 세 가지 방법이 있어요.</p>
+          <div class="grid2">
+            <div>
+              <p><b>① 한 명씩 — 상태 칸에서 바로</b></p>
+              <p>활성 회원 탭의 <b>상태(O열)</b>를 "비활성"으로 바꾸면 그 줄이 자동으로 비활성 회원 탭 맨 위로 옮겨가요. 비활성 회원 탭에서 "활성"으로 바꾸면 반대로 활성 회원 탭 맨 위로 돌아와요.</p>
+            </div>
+            <div>
+              <p><b>② 여러 명 한번에 — 줄 선택 후 버튼</b></p>
+              <p>옮길 손님들의 <b>줄 번호를 먼저 선택</b>(Shift로 범위, Cmd/Ctrl로 하나씩 추가)하고 <span class="btn-chip">비활성화 하기</span> / <span class="btn-chip">활성화 하기</span> 버튼을 누르면 선택한 사람 전부 한 번에 옮겨져요.</p>
+            </div>
+          </div>
+          <p><b>③ 회원 찾기 결과에서 바로</b> — 바로 위 "회원 찾기" 결과 줄에 있는 활성화 · 비활성화 버튼을 눌러도 똑같이 처리돼요. 시트를 열어둘 필요 없이 가장 빠르게 끝낼 수 있어요.</p>
+          <div class="tip">옮길 때마다 메모에 "비활성 YYYY-MM-DD" 또는 "재방문 YYYY-MM-DD"가 자동으로 남고, 다시 활성화된 회원은 🔁 재방문 표시(파란색)가 붙어요.</div>
+        </div>
+        <div class="card">
+          <h3><span class="emoji">✍️</span>회원 직접 추가</h3>
+          <p>폼 없이 샵에서 직접 등록할 때 쓰는 <span class="btn-chip">＋ 회원 직접 추가</span>. 이름 · 영문 이름 · 여권번호 등 기본 정보를 바로 입력해요. 여권번호가 이미 있는 회원이면 등록 대신 "이미 있는 회원이에요"라고 알려줘요.</p>
+          <div class="shot"><img src="guide_images/df33dc308951ec4c2039b724401487c8.png" alt="회원 직접 추가 입력창 — 한글 이름 · 영문 이름 · 성 · 생년월일 · 성별 · 국적 · 여권번호 · 픽업 등을 입력하고 '활성 회원에 추가' 버튼을 누름"></div>
+        </div>
+        <div class="card">
+          <h3><span class="emoji">📖</span>회원 이력 조회</h3>
+          <p>메뉴 <b>스쿠버존 → 회원 이력 조회</b>에서 이름 · 영문 · 회원번호로 검색하면, 그 손님이 우리 샵에서 다이빙한 횟수(펀·보트·나이트) · 교육 횟수 · 체험 횟수 · 전체 일정 건수 · 남은 패키지 횟수를 요약으로 보여주고, 아래에 날짜별 전체 이력(종류·시간·강사)이 표로 쭉 나와요.</p>
+          <p><b>① 메뉴에서 열기</b></p>
+          <div class="shot"><img src="guide_images/51ebcc3799ba9204621d8274bb2f2e4b.png" alt="스쿠버존 메뉴 → 회원 이력 조회 클릭 위치"></div>
+          <p><b>② 결과 화면</b></p>
+          <div class="shot"><img src="guide_images/081b624d759059500890c3ebadaf4978.png" alt="회원 이력 조회 결과 — 강주원 검색 결과, 펀다이빙 패키지 남은 횟수와 다이빙 횟수 요약, 날짜별 이력 표"></div>
+        </div>
+        <div class="card">
+          <h3><span class="emoji">🎨</span>활성 회원 탭 줄 색깔</h3>
+          <p>활성 회원 탭은 줄마다 자동으로 색이 칠해져서, 눈으로 훑기만 해도 뭘 봐야 할지 알 수 있어요.</p>
+          <div class="tblwrap">
+            <table>
+              <tr><th>색</th><th>의미</th></tr>
+              <tr><td>🔴 연한 빨강</td><td><b>픽업 칸이 비어있거나 "?"(모르겠음)</b> — 확인해서 채워 넣어야 해요. "-"(직접 옴)는 정상이라 빨강 대상이 아니에요</td></tr>
+              <tr><td>🟡 노랑</td><td>🆕 신규 — 등록한 지 얼마 안 된 회원 (<b>2일</b> 지나면 매일 새벽 자동으로 사라져요)</td></tr>
+              <tr><td>🔵 파랑</td><td>🔁 재방문 — 비활성이었다가 다시 활성으로 돌아온 회원 (<b>2일</b> 지나면 자동으로 사라져요)</td></tr>
+            </table>
+          </div>
+        </div>
+        <div class="card">
+          <h3><span class="emoji">🚐</span>회원 픽업 정보 넣기 · 바꾸기</h3>
+          <p>회원 탭의 <b>픽업 칸</b>은 드롭다운이에요 — 설정 탭에 등록된 픽업 장소 목록 중에서 고르면 되고, 목록에 없는 새 장소도 직접 입력할 수 있어요. 픽업이 필요 없이 직접 오는 손님은 <b>"-"</b>를 선택해요.</p>
+          <p><b>빨간색으로 표시된 줄</b>(픽업 칸이 비어있거나 "?")은 아직 픽업 정보가 안 들어간 회원이니, 손님께 확인해서 채워 넣어 주세요.</p>
+          <p>이미 픽업이 있는 회원의 <b>픽업 칸을 수정하면</b>, <b>오늘 이후로 이미 잡혀있는 그 회원의 일정</b>에도 새 픽업 장소가 자동으로 같이 반영돼요. 지난 날짜 기록은 그대로 둬요.</p>
+          <div class="tip">이미 "스케줄 만들기"로 뽑아놓은 홈 탭 표 자체는 자동으로 안 바뀌어요 — 바뀐 걸 보려면 홈 탭에서 <span class="btn-chip">스케줄 만들기</span>를 한 번 더 눌러주세요.</div>
+        </div>
+      </section>
+
+      <section id="daily">
+        <span class="tag">루틴</span>
+        <h2>스케줄 만들기</h2>
+        <p class="lede">아침마다(또는 전날 저녁) 이 순서대로 하면 돼요. "홈" 탭 하나에서 전부 끝나요.</p>
+
+        <div class="card">
+          <h3><span class="emoji">📅</span>1) 날짜 정하기</h3>
+          <p>홈 탭 맨 위 <b>날짜</b> 칸(B2)을 두 번 클릭하면 달력이 떠요. 내일 날짜가 기본으로 들어가 있어요. 스케줄 만들기 · 픽업 안내 · 이미지는 전부 이 날짜 기준으로 나와요.</p>
+          <div class="shot"><img src="guide_images/c5196c0be417b1b48930f8c3dbd4de1e.png" alt="홈 탭 날짜 칸을 두 번 클릭하면 뜨는 달력 팝업"></div>
+        </div>
+
+        <div class="card">
+          <h3><span class="emoji">🗂️</span>2) <span class="btn-chip">스케줄 만들기</span> 누르기</h3>
+          <p>그 날짜에 등록된 일정을 전부 모아서 표로 만들어줘요. <b>보트다이빙 → 펀다이빙 → 나이트 → 교육</b> 순으로 먼저 묶이고, 같은 종류 안에서는 시간이 빠른 순으로 정렬돼요. 패키지 쓰는 사람은 이름 옆 <b>Package</b> 칸에 <code>(사용/총)</code> 형식으로 자동 표시돼요.</p>
+          <ul class="steps">
+            <li>홈 탭에서 <span class="btn-chip">스케줄 만들기</span> 클릭</li>
+            <li>아래로 스케줄표 · 픽업 요약 · 영어 픽업 안내가 쭉 나와요</li>
+            <li>시간 · 가이드 · 픽업 장소가 틀리면 <b>표 안에서 직접 고쳐도 돼요</b> — 이미지 뽑을 때 고친 내용이 반영돼요</li>
+          </ul>
+          <div class="shot"><img src="guide_images/711e5671355adaceb92b3c668ac4dc3d.png" alt="스케줄 만들기를 눌렀을 때 홈 탭 아래 나오는 결과 표"></div>
+          <div class="tip">표 맨 아래 "Diving Site" 칸에 사이트가 여러 개 합쳐져 있으면(예: Canyon+Mashraba), 손님이 그 중 아무 데나 가는 게 아니라 <b>그 날 두 사이트를 순서대로</b> 간다는 뜻이에요.</div>
+        </div>
+
+        <div class="card">
+          <h3><span class="emoji">🖼️</span>3) 스케줄 이미지 뽑아서 공유하기</h3>
+          <p>카카오톡 등으로 공유할 이미지 두 종류가 있어요. <b>칸 구성(Activity · Guide · Name · Package · Pick up · Time · Diving Site · Remark)은 완전히 똑같고</b>, 실제로 다른 건 "어떤 일정까지 포함되는가"예요.</p>
+          <div class="grid2">
+            <div>
+              <p><span class="btn-chip">펀다 스케줄 이미지</span></p>
+              <p>스태프용. <b>펀다이빙 · 나이트다이빙 · 보트다이빙 · 체크다이빙</b>, 그리고 <b>스페셜티/트레이닝(EFR · 레스큐 · Deep/Nitrox Specialty · Kick/SMB/Buoyancy Training)</b>까지만 보여요. 오픈워터 · 어드밴스드 · DMT · IDC 같은 <b>정식 교육 과정은 빠져요</b> — 교육팀 일정까지 안 섞이게.</p>
+            </div>
+            <div>
+              <p><span class="btn-chip">패밀리방 스케줄 이미지</span></p>
+              <p>손님 단체방 공유용. <b>그 날의 일정을 전부</b> 보여줘요 — 펀다 이미지에 들어가는 것 + 오픈워터 · 어드밴스드 · DMT 같은 <b>정식 교육 과정까지 모두 포함</b>돼요. 제목 줄도 파란 배너로 다르게 나와요.</p>
+            </div>
+          </div>
+          <ul class="steps">
+            <li>버튼 클릭 → 창이 뜨면 <b>⬇ 이미지 다운로드</b> 클릭, 또는 그림 위에서 오른쪽 클릭 → "이미지 복사" 해서 바로 카톡에 붙여넣기</li>
+            <li>이미지 맨 아래에 "패키지에는 내일 예정된 다이빙까지 포함되어 있으며 …" 안내 문구가 항상 같이 나가요</li>
+          </ul>
+          <div class="grid2">
+            <div class="shot"><img src="guide_images/a4f5015a4f2d7a711d4b4d0f946f5918.png" alt="펀다 스케줄 이미지 예시 — Deep Specialty까지만 포함, AOW는 빠짐"><b style="margin-top:8px">펀다 이미지 — AOW 빠짐</b></div>
+            <div class="shot"><img src="guide_images/ea72b050bda6eafb2ddd34201d1299f0.png" alt="패밀리방 스케줄 이미지 예시 — AOW까지 전부 포함"><b style="margin-top:8px">패밀리방 이미지 — AOW까지 전부</b></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3><span class="emoji">🚗</span>4) 픽업 안내 보내기</h3>
+          <p>홈 탭 <span class="btn-chip">픽업 안내 (영어)</span>를 누르면, 이집션 드라이버에게 보낼 영어 픽업 메시지가 뜨는 창이 열려요. "복사하기" 누르고 바로 위챗 등에 붙여넣으면 돼요.</p>
+        </div>
+      </section>
+
+      <section id="addentry">
+        <span class="tag">일정 입력</span>
+        <h2>일정 직접 추가하기</h2>
+        <p class="lede">전화나 카톡으로 다이빙 신청이 들어오면 <span class="btn-chip">＋ 신청 추가</span>로 넣어요.</p>
+        <div class="card">
+          <ul class="steps">
+            <li>홈 탭 <span class="btn-chip">＋ 신청 추가</span> 클릭</li>
+            <li>날짜를 확인하고, <b>＋ 팀 추가</b>로 묶음을 만들어요 — 같은 시간 · 같은 일정을 하는 사람들을 한 팀으로 묶으면 돼요</li>
+            <li>이름 칸에 손님 이름 · 영문 · 회원번호 아무거나 입력해서 찾기 → 체크해서 선택</li>
+            <li>종류(펀다이빙 · 교육 · 보트다이빙 · 체험다이빙 · 기타 · 셋업) 고르기</li>
+            <li>펀다이빙을 골랐으면 사이트 선택 + 오른쪽 드롭다운에서 <b>일반 / 🌙 나이트다이빙 / 체크다이빙</b> 중 선택</li>
+            <li>시간 · 강사 · 메모 적고 <b>일정에 넣기</b></li>
+          </ul>
+          <div class="shot"><img src="guide_images/3600f9a4d09102263056a91503af484e.png" alt="＋ 신청 추가 창 — 날짜, 팀별 회원 찾기/체크, 사이트·종류·깡수·시간·강사·메모 입력, 일정에 넣기 버튼"></div>
+          <div class="tip">같은 손님이 며칠 연속으로 교육을 받으면, 과정을 고르는 순간 "며칠 연속"이 자동으로 채워져요(오픈워터=3일 등). 날짜가 다르면 숫자만 고쳐주면 돼요.</div>
+          <div class="tip">사이트를 최대 3개까지 "+"로 합쳐서 넣을 수 있어요. "미정(또는)" 체크를 하면 "A 또는 B"처럼 아직 안 정해졌다는 뜻으로 들어가요.</div>
+        </div>
+      </section>
+
+      <section id="package">
+        <span class="tag">패키지</span>
+        <h2>패키지 관리</h2>
+        <p class="lede">펀다이빙 10회 · 20회 · 한 달 무제한 패키지를 등록해두면, 그 손님이 펀다이빙할 때마다 자동으로 횟수가 깎여요.</p>
+
+        <div class="card">
+          <h3><span class="emoji">➕</span>패키지 등록하기</h3>
+          <ul class="steps">
+            <li><b>패키지</b> 탭으로 이동</li>
+            <li>맨 아래 빈 줄에 <b>회원번호</b>를 입력하면 이름은 자동으로 채워져요</li>
+            <li><b>패키지 종류</b>(10회/20회/한달 무제한) · <b>시작일</b> 선택, 결제 확인됐으면 <b>결제완료</b> 체크</li>
+          </ul>
+          <div class="tip"><b>노란 칸(회원번호 · 패키지 종류 · 시작일 · 결제완료 · 메모)만 적으면</b> 돼요 — 이름 · 가격 · 종료일 · 사용 횟수 · 잔여 횟수 · 상태 · 최근 소모일 같은 <b>회색 칸은 전부 자동으로 채워져요.</b> 손대지 마세요.</div>
+          <div class="shot"><img src="guide_images/2486879281ab6b52b4a4414e94784358.png" alt="패키지 탭 — 노란 칸(회원번호·패키지 종류·시작일·결제완료)만 입력하면 회색 칸(이름·가격·종료일·사용 횟수·잔여 횟수·상태·최근 소모일)은 자동으로 채워짐"></div>
+        </div>
+
+        <div class="card">
+          <h3><span class="emoji">🏷️</span>스케줄표에서 어떻게 보이나요</h3>
+          <p>패키지가 있는 손님은 스케줄표 · 이미지의 <b>Package (사용/총)</b> 칸에 <code>(14/20)</code> 처럼 표시돼요. 패키지가 없는 손님은 <code>-</code> 로 보여요.</p>
+          <div class="tblwrap">
+          <table>
+            <tr><th>표시</th><th>의미</th></tr>
+            <tr><td><code>-</code></td><td>패키지 없음 (그날그날 결제)</td></tr>
+            <tr><td><code>(14/20)</code></td><td>20회권 중 14회 사용 (6회 남음)</td></tr>
+            <tr><td><code>[무제한 12회]</code></td><td>한 달 무제한 패키지, 지금까지 12번 다이빙</td></tr>
+            <tr><td><code>⚠️다음부터 결제</code></td><td>이 다이빙으로 패키지를 전부 소진 — 다음부터는 결제 필요</td></tr>
+            <tr><td><code>⚠️ 패키지 종료</code></td><td>패키지가 이미 끝나서, 이 다이빙은 결제로 진행</td></tr>
+          </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3><span class="emoji">🧾</span>소모 내역 확인 · 되돌리기</h3>
+          <p>패키지 탭에서 확인하고 싶은 회원 줄(아무 칸)을 클릭하고 메뉴 <b>스쿠버존 → 패키지 소모 일정 조회</b>를 누르면, 그 패키지로 언제 · 어느 사이트에서 깎였는지 전부 보여줘요. 잘못 깎인 줄은 그 자리에서 <b>제외</b> 버튼으로 바로 되돌릴 수 있어요(횟수도 자동으로 복구돼요).</p>
+          <p><b>① 패키지 탭에서 회원 줄 선택 후 메뉴 클릭</b></p>
+          <div class="shot"><img src="guide_images/def6b9f228c52792419d341bbb3e55e5.png" alt="패키지 탭에서 회원 줄을 선택한 상태로 스쿠버존 메뉴 → 패키지 소모 일정 조회 클릭"></div>
+          <p><b>② 소모 내역 결과 — 날짜별 "제외" 버튼</b></p>
+          <div class="shot"><img src="guide_images/b339c43d3444d6f724249c319fe2e77b.png" alt="패키지 소모 일정 결과 — 날짜 · 다이빙 사이트 · 그날 소모 횟수 목록과 각 줄의 제외 버튼"></div>
+          <div class="tip"><b>"제외" 버튼 한 번으로 아래 6가지가 한꺼번에 자동 정리돼요</b> — 손으로 이 중 하나라도 빠뜨리면 숫자가 안 맞을 수 있어서, 수동으로 고치기보다는 꼭 이 버튼을 쓰는 걸 추천해요.
+            <ul style="margin:8px 0 0 18px;padding:0">
+              <li>일정 탭 그 줄의 <b>깡수</b> 칸 비움</li>
+              <li>일정 탭 그 줄의 <b>패키지 여부</b> 체크 해제</li>
+              <li>일정 탭 그 줄의 <b>배지</b> 칸 비움</li>
+              <li>일정 탭 그 줄의 <b>패키지 구분(몇 차)</b> 칸 비움</li>
+              <li>패키지 탭의 <b>사용 횟수</b>에서 그만큼 차감 (잔여 횟수 · 상태는 자동으로 같이 바뀜)</li>
+              <li>그 회원의 남은 소모 기록들 <b>배지 번호를 날짜순으로 다시 매김</b></li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3><span class="emoji">➕</span>이미 있던 일정을 패키지에 넣기</h3>
+          <p>펀다이빙은 패키지 등록 이후 날짜부터 자동으로 깎이지만, <b>결제가 늦게 확인돼서 일정이 먼저 있었던 경우</b>나 <b>나이트다이빙처럼 원래 자동으로는 안 깎이는 일정을 손님이 추가 금액 내고 패키지로 하고 싶다고 할 때</b> 쓰는 기능이에요. 전부 자동으로 처리하지 않고, <b>어떤 일정을 넣을지 직접 골라요.</b></p>
+          <ul class="steps">
+            <li>패키지 탭에서 그 회원의 <b>패키지 줄(아무 칸)을 선택</b></li>
+            <li>메뉴 <b>스쿠버존 → 패키지에 일정 추가</b> 클릭
+              <div class="shot"><img src="guide_images/60668e1d672d2b8c5469bf4af1d58037.png" alt="패키지 탭에서 회원 줄 선택 후 스쿠버존 메뉴 → 패키지에 일정 추가 클릭"></div>
+            </li>
+            <li>아직 패키지로 안 들어간 그 회원의 <b>펀다이빙 · 나이트다이빙 일정</b> 목록이 체크박스랑 같이 떠요(보트 · 교육은 목록에 안 나와요). <b>카테고리 · 종류가 각각 따로</b> 보여서 일정 탭 원본이랑 똑같이 확인할 수 있어요
+              <div class="shot"><img src="guide_images/2c047e09e08c80d688094e9126f3b50b.png" alt="패키지에 일정 추가 결과 화면 — 날짜 · 카테고리 · 종류 · 사이트 · 횟수 목록과 체크박스"></div>
+            </li>
+            <li>넣고 싶은 줄만 체크 — <b>횟수는 줄마다 직접 고칠 수 있어요</b>(펀다이빙은 기본 2회, 나이트다이빙은 기본 1회)</li>
+            <li><b>"선택한 일정 패키지로 넣기"</b> 클릭하면 그 줄들만 한꺼번에 깎여요</li>
+          </ul>
+          <div class="tip">예: 나이트다이빙에 $5만 더 내고 패키지로 하고 싶다고 하면, 여기서 그 나이트다이빙 줄만 체크해서 넣으면 돼요. $5는 시트가 자동으로 추적 안 하니, 일정 탭 메모 칸에 "+$5"라고 적어두는 걸 추천해요. 잘못 넣었으면 "패키지 소모 일정 조회"의 <b>제외</b> 버튼으로 되돌릴 수 있어요.</div>
+        </div>
+      </section>
+
+      <section id="theory">
+        <span class="tag">이론교육</span>
+        <h2>이론교육 발송 리스트</h2>
+        <p class="lede">오픈워터 · 어드밴스드 일정이 있는 손님에게는(재신청이든 처음이든 상관없이) 교육 시작일 3주 전까지 이론 자료를 보내줘야 해요. 이 탭이 자동으로 챙겨줘요.</p>
+        <div class="card">
+          <h3><span class="emoji">⚙️</span>리스트에 어떻게, 언제 올라오나요</h3>
+          <ul class="steps">
+            <li>"스케줄 만들기"를 누를 때마다 전체 일정을 훑어서, 앞으로 있을 <b>오픈워터 · 어드밴스드 일정을 전부</b> 찾아 자동으로 한 줄 추가해요 — <b>그 회원이 처음인지 재신청인지는 안 가려요</b></li>
+            <li>세미 오픈워터 · EFR · 레스큐 · DMT · IDC · 스페셜티 · 트레이닝 · 체크다이빙은 대상이 아니라서 리스트에 아예 안 올라가요(오픈워터 · 어드밴스드만 대상)</li>
+            <li>교육이 며칠짜리든(OW 3일 등) 첫날 기준으로 한 줄만 생겨요. 이미 지나간 교육은 안 훑어요 — 앞으로 할 교육만 챙겨요</li>
+            <li><b>발송 기한 = 교육 시작일 − 3주(21일)</b>. 예: 교육 시작일이 11/17이면 발송 기한은 10/27</li>
+            <li>한 번 <b>발송완료</b>를 체크한 줄은 이후 "스케줄 만들기"를 다시 눌러도 다시 안 건드려요. 체크하면 <b>발송일</b>이 오늘 날짜로 자동 기록되고, 체크를 풀면 발송일도 같이 지워져요</li>
+          </ul>
+          <div class="tip">직접 입력하는 칸은 <b>발송완료 체크 · 메모</b>뿐이에요. 회원번호 · 이름 · 과정 · 교육 시작일 · 발송 기한은 전부 자동으로 채워지니 손대지 마세요.</div>
+          <div class="shot"><img src="guide_images/440cc21bb4eace4a25456d9bcdc1514d.png" alt="이론교육 탭 — 발송 기한이 지났는데 미발송인 줄은 빨간색, 발송완료 체크된 줄은 발송일이 자동 기록됨"></div>
+          <div class="warn"><b>발송 기한 전날부터</b> — 즉 발송 기한 당일과 그 이후로 계속(발송완료 전까지) — 줄 전체가 빨간색으로 표시돼요. 오늘 날짜 기준으로 매일 자동으로 다시 계산되니, 빨간 줄만 그날그날 확인해서 보내주면 돼요.</div>
+        </div>
+      </section>
+
+      <section id="permit">
+        <span class="tag">서류</span>
+        <h2>Permit 명단 뽑기</h2>
+        <div class="grid2">
+          <div class="card">
+            <h3>일반 Permit</h3>
+            <p>홈 탭 <span class="btn-chip">퍼밋 명단</span> 클릭 → Permit 탭에서 날짜 · "All divers/Fun diving only" 선택 후 <b>Search</b> → <b>Download Excel</b>로 다이버 명단(여권정보 포함)을 엑셀로 받아요.</p>
+          </div>
+          <div class="card">
+            <h3>보트 Permit</h3>
+            <p>홈 탭 <span class="btn-chip">보트 퍼밋 명단</span> 클릭. 보트별로 블록이 나뉘어 나오고, Box No. · Weight Belt · Payment · Remark는 빈칸이니 직접 채워주세요.</p>
+          </div>
+        </div>
+        <div class="shot"><img src="guide_images/051c05e0f63548a005524335ea71b241.png" alt="Dive Permit List 결과 — 날짜별 다이버 명단(이름·생년월일·국적·성별·여권번호·Activity·숙소)"></div>
+        <div class="shot"><img src="guide_images/3da3ca7c70358151be8db05b826f33b7.png" alt="Boat Permit 결과 — 보트(Tiran)별 블록으로 나뉜 다이버 명단, Box No.·Weight Belt·Payment·Pick up·Remark는 직접 입력"></div>
+      </section>
+
+      <section id="mistakes">
+        <span class="tag">주의</span>
+        <h2>자주 하는 실수</h2>
+        <details>
+          <summary>일정 탭에 직접 입력했는데 빨간 세모(경고)가 떠요</summary>
+          <div class="inner">카테고리(D열)를 먼저 고르면 종류 · 다이빙 사이트 칸의 선택지가 자동으로 좁혀져요. 카테고리부터 순서대로 입력하세요. 설정 탭에 등록 안 된 이름을 적으면 경고가 뜨는데, 자주 쓰는 이름이면 설정 탭에 추가해달라고 요청하세요.</div>
+        </details>
+        <details>
+          <summary>패키지 손님인데 횟수가 안 깎여요</summary>
+          <div class="inner">종류(E열)가 "-"이고 카테고리가 "펀다이빙"인 일반 다이빙만 <b>자동으로</b> 패키지가 깎여요. 보트다이빙 · 나이트다이빙 · 교육은 자동으로는 안 깎여요(원래 그런 거예요) — 나이트다이빙을 패키지로 하고 싶다고 하면 패키지 탭에서 "패키지에 일정 추가" 메뉴로 직접 골라서 넣을 수 있어요. 패키지 시작일이 다이빙 날짜보다 나중이어도 안 깎여요 — 시작일을 확인하세요.</div>
+        </details>
+        <details>
+          <summary>이론교육 리스트에 당연히 있어야 할 사람이 안 보여요</summary>
+          <div class="inner">오픈워터 · 어드밴스드 과정이 아니면(세미 오픈워터 · EFR · 레스큐 · DMT · IDC · 스페셜티 · 트레이닝 · 체크다이빙 등) 리스트 대상이 아니라서 의도적으로 안 올라가요. 종류 칸에 "AOW" 같은 약어로 적혀 있어도 자동으로 알아보니 그건 걱정 안 해도 돼요. 날짜가 이미 지난 교육도 안 올라가요(앞으로 할 교육만 챙겨요).</div>
+        </details>
+        <details>
+          <summary>스케줄표에 패키지 숫자가 이상해요(소진했는데 남아있다고 나와요)</summary>
+          <div class="inner">제외 버튼을 눌렀거나 나이트다이빙 되돌리기를 했는데 뒤에 찍힌 배지가 안 바뀌었을 수 있어요. 메뉴 <b>스쿠버존 → 패키지 소모 일정 조회</b>에서 그 회원을 다시 확인해보세요.</div>
+        </details>
+      </section>
+
+      <section id="trouble">
+        <span class="tag">문제 해결</span>
+        <h2>문제가 생겼을 때</h2>
+        <div class="card">
+          <h3>버튼이 안 보여요 / 버튼이 하나 없어요</h3>
+          <p>구글이 그림 버튼을 한 번에 못 그릴 때가 있어요. Apps Script 편집기에서 <code>setupSchedule</code>을 한 번 더 실행하면 버튼이 전부 다시 그려져요.</p>
+        </div>
+        <div class="card">
+          <h3>그래도 안 되면</h3>
+          <p>화면을 캡쳐해서 서현님에게 보내주세요. 어느 탭, 어느 버튼을 눌렀는지만 같이 알려주면 빨라요.</p>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <footer>스쿠버존 다합 · 내부용 가이드 · 화면 구성은 실제 시트와 조금씩 달라질 수 있어요</footer>
+</div>
