@@ -152,7 +152,8 @@ var PKG_ROWS_CACHE_ = null;
 function pkgRawRows_(ss) {
   if (PKG_ROWS_CACHE_) return PKG_ROWS_CACHE_;
   const sh = ss.getSheetByName(PKG);
-  PKG_ROWS_CACHE_ = (!sh || sh.getLastRow() < 2) ? [] : sh.getRange(2, 1, sh.getLastRow() - 1, PKG_HEAD.length).getValues();
+  const last = sh && typeof scRealLastRow_ === 'function' ? scRealLastRow_(sh, 1) : (sh ? sh.getLastRow() : 0);
+  PKG_ROWS_CACHE_ = (!sh || last < 2) ? [] : sh.getRange(2, 1, last - 1, PKG_HEAD.length).getValues();
   return PKG_ROWS_CACHE_;
 }
 
@@ -201,22 +202,27 @@ function pkgBadgeText_(type, used) {
 // 일정 탭 N열(패키지 카운팅) 배지는 "그때그때 처리하면서 찍어둔 숫자"라서, 나중에 중간 줄 하나를 되돌리거나(제외 · 나이트 되돌리기) 깡수를 손으로 고치면
 // 그 뒤에 이미 찍혀있던 배지들은 그대로 남아서 실제 잔여 횟수랑 안 맞게 돼요. 이 함수가 그 회원의 패키지별 배지를 날짜 순서로 처음부터 다시 계산해서 싹 다시 써요.
 // (차수 구분이 없는 옛날 줄은 어느 패키지인지 몰라서 안 건드려요 — pkgShowHistory_의 "안 보여요" 안내랑 같은 이유예요)
+// 바로 직전에 다른 함수가 일정 · 패키지 탭에 방금 써놓은 값을 이어서 읽어야 해서(스케줄/배지가 막 바뀐 직후), scRawRows_ · pkgRawRows_ 캐시는 못 써요(그 캐시는 이번 실행 맨 처음 상태라 오래된 값일 수 있어요) —
+// 대신 scRealLastRow_로 실제 마지막 줄까지만 매번 새로 읽어서, 느려지는 것만 막아요
 function pkgRecalcBadges_(code) {
   const ss = SpreadsheetApp.getActive();
   const dataSh = ss.getSheetByName(SC.DATA);
   const pkgSh = ss.getSheetByName(PKG);
-  if (!dataSh || dataSh.getLastRow() < 2 || !pkgSh) return;
+  if (!dataSh || !pkgSh) return;
   const typeBySeq = {};
   let onlySeq = null, pkgRowCount = 0;
-  if (pkgSh.getLastRow() > 1) {
-    pkgSh.getRange(2, 1, pkgSh.getLastRow() - 1, PKG_HEAD.length).getValues().forEach(r => {
+  const pkgLast = scRealLastRow_(pkgSh, 1);
+  if (pkgLast > 1) {
+    pkgSh.getRange(2, 1, pkgLast - 1, PKG_HEAD.length).getValues().forEach(r => {
       if (String(r[0]).trim() !== code) return;
       const seq = Number(r[13]) || 0;
       typeBySeq[seq] = PKG_TYPES[String(r[2]).trim()];
       onlySeq = seq; pkgRowCount++;
     });
   }
-  const n = dataSh.getLastRow() - 1;
+  const dataLast = scRealLastRow_(dataSh, 1);
+  if (dataLast < 2) return;
+  const n = dataLast - 1;
   const vals = dataSh.getRange(2, 1, n, SC_HEAD.length).getValues();
   const bySeq = {};
   vals.forEach((r, i) => {
@@ -242,8 +248,9 @@ function pkgRecalcBadges_(code) {
 function runRecalcAllBadges() {
   const ss = SpreadsheetApp.getActive();
   const pkgSh = ss.getSheetByName(PKG);
-  if (!pkgSh || pkgSh.getLastRow() < 2) { SpreadsheetApp.getActive().toast('패키지 탭이 비어있어요.', '배지 다시 계산', 5); return; }
-  const codes = new Set(pkgSh.getRange(2, 1, pkgSh.getLastRow() - 1, 1).getValues().map(r => String(r[0]).trim()).filter(Boolean));
+  const last = pkgSh ? scRealLastRow_(pkgSh, 1) : 0;
+  if (last < 2) { SpreadsheetApp.getActive().toast('패키지 탭이 비어있어요.', '배지 다시 계산', 5); return; }
+  const codes = new Set(pkgSh.getRange(2, 1, last - 1, 1).getValues().map(r => String(r[0]).trim()).filter(Boolean));
   codes.forEach(code => pkgRecalcBadges_(code));
   SpreadsheetApp.getActive().toast(codes.size + '명의 패키지 배지를 다시 계산했어요.', '배지 다시 계산', 8);
 }
@@ -263,18 +270,11 @@ function pkgApplyToMembers_(ss, date, ms) {
         const use = (Number(m.pkgUse) > 0) ? Number(m.pkgUse) : PKG_DEFAULT_USE;
         const newUsed = pkgConsume_(ss, active.row, use, date);
         badge = pkgBadgeText_(active.type, newUsed);
-        if (!active.type.days && newUsed >= active.type.count) badge += ' ⚠️다음부터 결제';   // 이번 다이빙으로 횟수를 다 썼어요 — 다음부터는 결제 필요
+        if (!active.type.days && newUsed >= active.type.count) badge += ' ⚠️사용 완료';   // 이번 다이빙으로 횟수를 다 썼어요 — 다음부터는 결제 필요
         // L · M · N · O열(깡수 · 패키지여부 · 배지 · 패키지구분)이 붙어있는 칸이라, 한 번에 묶어서 써요 — 사람마다 4번 왕복하던 걸 1번으로 줄여서 스케줄 만들기가 빨라져요
         if (dataSh && m.row) dataSh.getRange(m.row, 12, 1, 4).setValues([[use, true, badge, active.seq]]);
         m.pkgDone = true;
         m.pkgBadge = badge;
-      } else {
-        // 지금 쓸 수 있는 패키지가 없어요 — 패키지 탭에 이 회원 줄이 있는데(전에 패키지가 있었는데) 소진 · 만료됐으면, 지금은 패키지 없이 다이빙하는 거니까 결제 필요 표시를 해줘요
-        const pkgRow = pkgFindRowByCode_(m.code);
-        if (pkgRow) {
-          const status = String(ss.getSheetByName(PKG).getRange(pkgRow, 10).getValue() || '').trim();
-          if (status === '소진' || status === '만료') badge = '⚠️ 패키지 종료';
-        }
       }
     }
     // 이름에는 더 이상 안 붙여요 — 스케줄표에서 이름 옆에 "패키지" 칸을 따로 둬서 거기에만 보여줘요 (패키지 없는 사람은 그 칸에 "-")
@@ -282,30 +282,92 @@ function pkgApplyToMembers_(ss, date, ms) {
   });
 }
 
-// 패키지 시작일이 과거라서, 이미 일정 탭에 쌓여있던 날짜들을 소급해서 한 번에 소모 처리하고 싶을 때 써요.
-// (buildSchedule()은 "그 날짜"에 스케줄을 만들 때만 소모하기 때문에, 이미 지나간 날짜들은 따로 한 번 돌려줘야 해요)
-// 회원번호 하나만 보고 그 사람 줄만 훑어요 — 일정 탭 전체를 여러 번 도는 게 아니라 한 번 읽고 필터링만 하는 거라 안 느려요.
-function pkgBackfillMember_(code) {
+// 패키지 탭에서 회원 줄(아무 칸)을 선택해두고 메뉴 "스쿠버존 → 패키지에 일정 추가"를 누르면,
+// 그 회원의 일정 중 아직 이 패키지로 안 깎인 펀다이빙 · 나이트다이빙 줄을 목록으로 보여줘요.
+// 전부 자동으로 처리하지 않고, 어느 날짜를 이 패키지로 넣을지 체크박스로 직접 골라요 — 나이트다이빙도 (손님이 추가 금액 내고 패키지로 하고 싶다고 하면) 여기서 고를 수 있어요.
+// pkgMemberHistory()랑 짝이 되는 기능이에요: 저쪽은 "이미 깎인 걸 빼기", 이쪽은 "안 깎인 걸 넣기"
+function pkgAddConsumptionDialog() {
   const ss = SpreadsheetApp.getActive();
-  const sh = ss.getSheetByName(SC.DATA);
-  if (!sh || sh.getLastRow() < 2) { Logger.log('일정 탭이 비어있어요.'); return; }
+  const cell = ss.getActiveCell();
+  const sh = cell.getSheet();
+  if (sh.getName() !== PKG) { SpreadsheetApp.getUi().alert('패키지 탭에서 회원 줄(아무 칸)을 선택하고 다시 실행해주세요.'); return; }
+  const row = cell.getRow();
+  const code = String(sh.getRange(row, 1).getValue() || '').trim();
+  if (!code) { SpreadsheetApp.getUi().alert('그 줄에 회원번호가 없어요.'); return; }
+  const name = sh.getRange(row, 2).getValue();
+  const type = String(sh.getRange(row, 3).getValue() || '');
+  const seq = Number(sh.getRange(row, 14).getValue()) || '';
+  const pkgId = String(sh.getRange(row, 15).getValue() || '').trim();
+
   const S = scReadSettings_(ss);
-  const rows = sh.getRange(2, 1, sh.getLastRow() - 1, SC_HEAD.length).getValues();
-  const mine = [];
-  rows.forEach((r, idx) => {
-    if (String(r[1]).trim() !== String(code).trim()) return;
-    if (!(r[0] instanceof Date) || !r[4]) return;
-    const cat = String(r[3] || '').trim();
-    const label = scSynthLabel_(r[3], r[4], r[5]);
-    const info = S.labels[scNorm_(label)];
-    const kind = info ? info.kind : (SC_CAT_KIND_HINT[cat] || 'Fun');
-    if (kind !== 'Fun') return;   // 보트 · 나이트 · 교육은 패키지 대상 아니에요
-    mine.push({ date: r[0], m: { code: String(r[1]), name: String(r[2] || r[1]), row: idx + 2, pkgUse: r[11], pkgDone: r[12] === true, pkgBadge: String(r[13] || '').trim() } });
+  const items = [];
+  {
+    const vals = scRawRows_(ss);   // 캐시된 읽기 — 일정 탭을 통째로 다시 안 읽어요
+    vals.forEach((r, i) => {
+      if (String(r[1]).trim() !== code || r[12] === true) return;   // 이미 패키지로 처리된 줄은 빼요
+      if (!(r[0] instanceof Date)) return;
+      const cat = String(r[3] || '').trim();
+      const typeVal = String(r[4] || '').trim();
+      const { kind } = scKindOf_(r[3], r[4], r[5], S);
+      if (kind !== 'Fun' && kind !== 'Night') return;   // 보트 · 교육은 대상 아니에요. 펀다이빙 · 나이트다이빙만 골라서 보여줘요
+      items.push({ row: i + 2, date: scFmt_(r[0]), cat: cat || '-', type: typeVal || '-', site: String(r[5] || '') || '-', night: kind === 'Night' });
+    });
+  }
+  items.sort((a, b) => b.date.localeCompare(a.date));   // 최근 날짜가 위로 — 찾기 쉽게
+
+  const html = HtmlService.createHtmlOutput(
+    '<style>body{font-family:-apple-system,"Apple SD Gothic Neo",sans-serif;font-size:14px;padding:4px;color:#1F2A30}' +
+    'table{width:100%;border-collapse:collapse;margin-top:8px}th,td{padding:6px 8px;border-bottom:1px solid #E1E8EB;text-align:left}' +
+    'th{background:#D9E1F2}h3{margin:0 0 2px}.sub{color:#2E5E80;font-size:12px;margin-bottom:6px}' +
+    'input[type=number]{width:46px;padding:2px 4px}' +
+    'button#go{margin-top:12px;width:100%;padding:11px;border:0;border-radius:10px;background:#2E7D5B;color:#fff;font-size:15px;font-weight:700;cursor:pointer}' +
+    'button#go:disabled{opacity:.5}.msg{font-size:12px;color:#2E5E80;margin-top:6px}</style>' +
+    '<h3>' + (name || code) + ' (' + code + ')</h3>' +
+    '<div class="sub">' + (pkgId ? pkgId + ' · ' : '') + (type ? type + ' · ' : '') + (seq ? seq + '차' : '') + '에 넣을 일정을 골라주세요</div>' +
+    '<table><tr><th></th><th>날짜</th><th>카테고리</th><th>종류</th><th>사이트</th><th>횟수</th></tr>' +
+    (items.length ? items.map(it => '<tr><td><input type="checkbox" data-row="' + it.row + '"></td><td>' + it.date + '</td><td>' + it.cat + '</td><td>' + (it.night ? '🌙 ' : '') + it.type + '</td><td>' + it.site + '</td><td><input type="number" min="1" value="' + (it.night ? 1 : PKG_DEFAULT_USE) + '" data-use="' + it.row + '"></td></tr>').join('')
+      : '<tr><td colspan="6">아직 패키지로 안 들어간 펀다이빙 · 나이트다이빙 일정이 없어요.</td></tr>') +
+    '</table>' +
+    (items.length ? '<button id="go">선택한 일정 패키지로 넣기</button>' : '') +
+    '<div class="msg" id="msg"></div>' +
+    '<script>' +
+    'var btn = document.getElementById("go");' +
+    'if (btn) btn.onclick = function () {' +
+    '  var picks = [];' +
+    '  document.querySelectorAll("input[type=checkbox]:checked").forEach(function (cb) {' +
+    '    var r = cb.dataset.row; var use = Number(document.querySelector(\'input[data-use="\' + r + \'"]\').value) || 1;' +
+    '    picks.push({ row: Number(r), use: use });' +
+    '  });' +
+    '  if (!picks.length) { document.getElementById("msg").textContent = "하나 이상 선택해주세요."; return; }' +
+    '  btn.disabled = true; document.getElementById("msg").textContent = "처리 중...";' +
+    '  google.script.run.withSuccessHandler(function (msg) { document.getElementById("msg").textContent = msg; btn.textContent = "완료"; })' +
+    '    .withFailureHandler(function (e) { btn.disabled = false; document.getElementById("msg").textContent = "오류: " + e.message; })' +
+    '    .pkgApplyPicked(' + row + ', picks);' +
+    '};' +
+    '</script>'
+  ).setWidth(480).setHeight(520);
+  SpreadsheetApp.getUi().showModalDialog(html, '패키지에 일정 추가 · ' + (name || code));
+}
+
+// pkgAddConsumptionDialog()의 "선택한 일정 패키지로 넣기" 버튼이 불러요 — 고른 줄들을 그 패키지(pkgRow)에서 한꺼번에 깎아요.
+// 이름 끝에 _를 안 붙여요 — google.script.run은 밑줄로 끝나는 함수를 비공개로 보고 못 불러요(getMemberHistory_ 때 겪은 문제랑 같은 거예요)
+function pkgApplyPicked(pkgRow, picks) {
+  const ss = SpreadsheetApp.getActive();
+  const dataSh = ss.getSheetByName(SC.DATA);
+  const pkgSh = ss.getSheetByName(PKG);
+  const type = PKG_TYPES[String(pkgSh.getRange(pkgRow, 3).getValue() || '').trim()];
+  const seq = Number(pkgSh.getRange(pkgRow, 14).getValue()) || '';
+  let code = '';
+  picks.forEach(p => {
+    const date = dataSh.getRange(p.row, 1).getValue();
+    const use = Math.max(1, Number(p.use) || 1);
+    const newUsed = pkgConsume_(ss, pkgRow, use, date);
+    const badge = type ? pkgBadgeText_(type, newUsed) : '';
+    dataSh.getRange(p.row, 12, 1, 4).setValues([[use, true, badge, seq]]);
+    code = String(dataSh.getRange(p.row, 2).getValue() || '').trim();
   });
-  mine.sort((a, b) => a.date - b.date);   // 날짜 순서대로 소모해야 "몇 번째"가 맞아요
-  let n = 0;
-  mine.forEach(x => { pkgApplyToMembers_(ss, x.date, [x.m]); if (x.m.pkgBadge) n++; });
-  SpreadsheetApp.getActive().toast(code + ' 과거 펀다이빙 ' + mine.length + '건 중 ' + n + '건 소급 처리했어요.', '패키지 소급 처리', 8);
+  if (code) pkgRecalcBadges_(code);   // 날짜 순서로 배지 번호를 다시 맞춰요(선택한 순서가 날짜 순이 아닐 수 있어서)
+  return picks.length + '건 패키지로 넣었어요.';
 }
 
 // 회원번호로 패키지 탭 줄을 찾아요 (활성 조건 안 따지고 그냥 그 사람 줄 — 사용 횟수 손으로 조정할 때 써요)
@@ -337,14 +399,11 @@ function pkgMemberHistory() {
 
 function pkgShowHistory_(code, name, seq, type, pkgId, pkgRow) {
   const ss = SpreadsheetApp.getActive();
-  const dataSh = ss.getSheetByName(SC.DATA);
-  const pkgSh = ss.getSheetByName(PKG);
   // 이 회원이 패키지를 몇 번 끊었는지 — 한 번뿐이면 "패키지 구분"(O열) 생기기 전에 깎인 옛날 줄도 당연히 이 패키지니까 같이 보여줘요
-  const codeRowCount = pkgSh && pkgSh.getLastRow() > 1
-    ? pkgSh.getRange(2, 1, pkgSh.getLastRow() - 1, 1).getValues().filter(r => String(r[0]).trim() === code).length : 0;
+  const codeRowCount = pkgRawRows_(ss).filter(r => String(r[0]).trim() === code).length;
   const rows = []; let unassigned = 0, unassignedUse = 0;
-  if (dataSh && dataSh.getLastRow() > 1) {
-    const vals = dataSh.getRange(2, 1, dataSh.getLastRow() - 1, SC_HEAD.length).getValues();
+  {
+    const vals = scRawRows_(ss);   // 캐시된 읽기 — 일정 탭을 통째로 다시 안 읽어요
     vals.forEach((r, i) => {
       if (String(r[1]).trim() !== code || r[12] !== true) return;   // M열(패키지 여부) 체크된, 실제로 소모된 줄만
       const tag = r[14];   // O열 = 패키지 구분(몇 차 패키지인지)
@@ -367,33 +426,69 @@ function pkgShowHistory_(code, name, seq, type, pkgId, pkgRow) {
     'th{background:#D9E1F2}h3{margin:0 0 2px}.sub{color:#2E5E80;font-size:12px;margin-bottom:6px}.sum{color:#7A8A92;margin-bottom:8px}' +
     '.warn{background:#FDECEA;color:#9A2A1C;border-radius:6px;padding:6px 8px;font-size:12px;margin-top:8px}' +
     'button.ex{background:#fff;border:1px solid #E08E79;color:#C0392B;border-radius:6px;padding:3px 8px;font-size:12px;cursor:pointer}' +
-    'button.ex:disabled{opacity:.5;cursor:default}' +
+    'button.sv{background:#fff;border:1px solid #6AA37D;color:#2E7D5B;border-radius:6px;padding:3px 8px;font-size:12px;cursor:pointer;margin-left:6px}' +
+    'button.ex:disabled,button.sv:disabled{opacity:.5;cursor:default}' +
+    'input.use{width:44px;padding:2px 4px}' +
     'tr.gone{opacity:.35;text-decoration:line-through}</style>' +
     '<h3>' + (name || code) + ' (' + code + ')</h3>' +
     '<div class="sub">' + subtitle + '</div>' +
     '<div class="sum" id="sum">이 패키지로 소모된 일정 ' + rows.length + '건 · 총 ' + total + '회 소모</div>' +
     '<table><tr><th>날짜</th><th>다이빙 사이트</th><th>그날 소모</th><th></th></tr>' +
     '<tbody id="body">' +
-    (rows.length ? rows.map(r => '<tr data-row="' + r.row + '" data-use="' + r.use + '"><td>' + r.date + '</td><td>' + r.site + '</td><td>' + r.use + '회</td>' +
+    (rows.length ? rows.map(r => '<tr data-row="' + r.row + '" data-use="' + r.use + '"><td>' + r.date + '</td><td>' + r.site + '</td>' +
+      '<td><input class="use" type="number" min="0" value="' + r.use + '"><button class="sv" onclick="sv(this)">저장</button></td>' +
       '<td><button class="ex" onclick="ex(this)">제외</button></td></tr>').join('') : '<tr><td colspan="4">패키지로 소모된 기록이 아직 없어요.</td></tr>') +
     '</tbody></table>' + note +
     '<script>' +
+    'function recalcSum(){' +
+    '  var total = 0; document.querySelectorAll("#body tr[data-row]").forEach(function(tr){ if(!tr.classList.contains("gone")) total += Number(tr.dataset.use) || 0; });' +
+    '  document.getElementById("sum").textContent = "이 패키지로 소모된 일정 " + document.querySelectorAll("#body tr[data-row]:not(.gone)").length + "건 · 총 " + total + "회 소모";' +
+    '}' +
+    'function sv(btn){' +
+    '  var tr = btn.closest("tr"); var input = tr.querySelector(".use"); var row = Number(tr.dataset.row); var newUse = Number(input.value);' +
+    '  if (!(newUse >= 0)) { alert("횟수를 올바르게 입력해주세요."); return; }' +
+    '  btn.disabled = true; btn.textContent = "...";' +
+    '  google.script.run.withSuccessHandler(function(){' +
+    '    btn.textContent = "완료!"; tr.dataset.use = newUse; recalcSum();' +
+    '    setTimeout(function(){ btn.disabled = false; btn.textContent = "저장"; }, 1200);' +
+    '  }).withFailureHandler(function(err){ btn.disabled = false; btn.textContent = "저장"; alert("실패: " + err.message); })' +
+    '  .pkgUpdateRowUse(row, ' + pkgRow + ', newUse);' +
+    '}' +
     'function ex(btn){' +
     "  if(!confirm('이 일정을 패키지 소모에서 제외할까요? 패키지 사용 횟수가 그만큼 다시 돌아가요.')) return;" +
     '  btn.disabled = true; btn.textContent = "...";' +
     '  var tr = btn.closest("tr"); var row = Number(tr.dataset.row); var use = Number(tr.dataset.use);' +
     '  google.script.run.withSuccessHandler(function(){' +
-    '    tr.classList.add("gone"); btn.remove();' +
+    '    tr.classList.add("gone"); btn.remove(); recalcSum();' +
     '  }).withFailureHandler(function(err){ btn.disabled = false; btn.textContent = "제외"; alert("실패: " + err.message); })' +
-    '  .pkgUnconsumeRow_(row, ' + pkgRow + ', use);' +
+    '  .pkgUnconsumeRow(row, ' + pkgRow + ', use);' +
     '}' +
     '</script>'
-  ).setWidth(460).setHeight(480);
+  ).setWidth(480).setHeight(500);
   SpreadsheetApp.getUi().showModalDialog(html, '패키지 소모 일정 · ' + (name || code));
 }
 
+// pkgShowHistory_() 조회 창의 "저장" 버튼이 불러요 — 그 일정 한 줄의 소모 횟수(L열)를 고치고, 패키지 탭 사용 횟수를 그 차이만큼 바로 조정해요.
+// 이름 끝에 _를 안 붙여요 — google.script.run은 밑줄로 끝나는 함수를 비공개로 보고 못 불러요
+function pkgUpdateRowUse(dataRow, pkgRow, newUse) {
+  const ss = SpreadsheetApp.getActive();
+  const dataSh = ss.getSheetByName(SC.DATA);
+  const pkgSh = ss.getSheetByName(PKG);
+  const oldUse = Number(dataSh.getRange(dataRow, 12).getValue()) || 0;
+  const delta = newUse - oldUse;
+  if (delta) {
+    const hCell = pkgSh.getRange(pkgRow, 8);
+    hCell.setValue(Math.max(0, (Number(hCell.getValue()) || 0) + delta));
+  }
+  dataSh.getRange(dataRow, 12).setValue(newUse);
+  const code = String(dataSh.getRange(dataRow, 2).getValue() || '').trim();
+  if (code) pkgRecalcBadges_(code);
+  return true;
+}
+
 // pkgMemberHistory() 조회 창의 "제외" 버튼이 불러요 — 그 일정 한 줄만 패키지 소모에서 빼고(L · M · N · O열 지움), 패키지 탭 사용 횟수도 그만큼 돌려줘요.
-function pkgUnconsumeRow_(dataRow, pkgRow, use) {
+// 이름 끝에 _를 안 붙여요 — google.script.run은 밑줄로 끝나는 함수를 비공개로 보고 못 불러요(이 함수도 전엔 _가 붙어있어서 "제외" 버튼이 실제로는 작동 안 했을 거예요)
+function pkgUnconsumeRow(dataRow, pkgRow, use) {
   const ss = SpreadsheetApp.getActive();
   const dataSh = ss.getSheetByName(SC.DATA);
   const pkgSh = ss.getSheetByName(PKG);
@@ -457,8 +552,9 @@ function pkgRegisterFromForm_(code, pkgLabel, day) {
   if (!PKG_TYPES[pkgLabel]) return;
   const ss = SpreadsheetApp.getActive();
   const sh = ss.getSheetByName(PKG) || setupPackageSheet();
-  if (sh.getLastRow() > 1) {
-    const codes = sh.getRange(2, 1, sh.getLastRow() - 1, 1).getValues().map(r => String(r[0]).trim());
+  const last = scRealLastRow_(sh, 1);
+  if (last > 1) {
+    const codes = sh.getRange(2, 1, last - 1, 1).getValues().map(r => String(r[0]).trim());
     if (codes.indexOf(String(code).trim()) >= 0) return;   // 이미 등록돼 있으면 중복으로 또 안 만들어요
   }
   const row = pkgNextEmptyRow_(sh);

@@ -15,12 +15,14 @@ var INACTIVE = '비활성 회원';
 var FORM_RESP = '폼 응답';
 var HEAD = ['회원번호', 'FirstName', 'LastName', 'Birthdate', 'Nationality', 'Gender', 'PassportNumber', 'Activity', 'Accomodation', 'RoomNumber',
   'ResponsiblePassportNumber', 'ResponsibleNationality', '최초 등록일', '한글 이름', '상태', '신규', '방문 기록 (기존)', '마지막 방문', 'E-mail', '연락처',
-  '숙소 · 위치', '픽업', '레벨', '발급 단체', '총 다이빙', '마지막 다이빙', '신청 종류', '여권 사본', '자격증', '증명사진', '메디컬', '주소', '영문 주소', '메모', '카카오톡 아이디'];
+  '숙소 · 위치', '픽업', '레벨', '발급 단체', '총 다이빙', '마지막 다이빙', '신청 종류', '여권 사본', '자격증', '증명사진', '메디컬', '주소', '영문 주소', '메모', '카카오톡 아이디',
+  'Family'];   // 끝에 추가 — 강사는 아니지만 백업으로 다이빙 도와주는 가족/지인 회원 표시용 체크박스. 체크된 회원은 이론교육 리스트 대상에서 빠져요(이론교육.gs)
 var H = t => HEAD.indexOf(t) + 1;                       // 열 번호
 // 새 회원이 폼으로 등록되면 이 주소로 메일을 보내요 (MJ 쌤 이메일을 적어 주세요. 비워 두면 안 보내요)
 var NOTIFY_EMAIL = '';
 // 🆕 신규 · 🔁 재방문 표시를 며칠 동안 남길지 (지나면 매일 새벽에 자동으로 지워져요)
-var MARK_DAYS = 3;
+var NEW_MARK_DAYS = 2;    // 🆕 신규
+var MARK_DAYS = 2;        // 🔁 재방문
 var M_HEAD = 2;                                          // 제목 줄
 var M_FIRST = 3;                                         // 첫 회원 줄
 var C = { head: '#D9E1F2', active: '#E3F1EA', inactive: '#EFE9F7', mark: '#FFF2CC', warn: '#F8CBAD', bar: '#F3F7FA' };
@@ -35,6 +37,7 @@ function setup() {
   const ss = SpreadsheetApp.getActive();
   [ACTIVE, INACTIVE].forEach(name => {
     const sh = ss.getSheetByName(name) || ss.insertSheet(name);
+    if (sh.getMaxColumns() < HEAD.length) sh.insertColumnsAfter(sh.getMaxColumns(), HEAD.length - sh.getMaxColumns());   // HEAD에 칸이 새로 늘어났는데 시트에 실제 칸이 모자라면 먼저 늘려요
     if (sh.getLastRow() === 0) sh.getRange(1, 1, 1, HEAD.length).setValues([HEAD]);
     if (String(sh.getRange(1, 1).getValue()) === '회원번호') sh.insertRowBefore(1);   // 가져온 그대로면 맨 위에 버튼 줄 하나 넣기
     sh.getRange(M_HEAD, 1, 1, HEAD.length).setValues([HEAD]).setFontWeight('bold').setBackground(C.head).setWrap(true).setHorizontalAlignment('center').setVerticalAlignment('middle');   // HEAD에 칸을 새로 추가해도 다음에 setup()만 다시 실행하면 자동으로 따라와요
@@ -49,6 +52,7 @@ function setup() {
     const pickupChoices = ['-', '?'];
     if (setSh && setSh.getLastRow() > 1) setSh.getRange(2, 6, setSh.getLastRow() - 1, 1).getValues().forEach(r => { if (r[0]) pickupChoices.push(String(r[0]).trim()); });
     sh.getRange(M_FIRST, H('픽업'), n, 1).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(pickupChoices, true).setAllowInvalid(true).build());
+    sh.getRange(M_FIRST, H('Family'), n, 1).insertCheckboxes();
     markRules_(sh);
     // 예전 비활성화하기 · 활성화하기 버튼은 지우고 회원 찾기만
     sh.getImages().forEach(im => { try { if (['openDeactivateDialog', 'openActivateDialog'].indexOf(im.getScript()) >= 0) im.remove(); } catch (e) {} });
@@ -71,6 +75,7 @@ function onOpen() {
     .addItem('대기중인 폼 신청', 'openPendingFormDialog')
     .addSeparator()
     .addItem('패키지 소모 일정 조회', 'pkgMemberHistory')
+    .addItem('패키지에 일정 추가', 'pkgAddConsumptionDialog')
     .addSeparator()
     .addItem('서식 다시 맞추기 · 버튼 다시 붙이기', 'setup')
     .addItem('폼 만들기 (완성될 때까지 반복)', 'buildForm')
@@ -126,13 +131,13 @@ function clearOldMarks() {
   rows.forEach((r, i) => {
     const mark = String(r[H('신규') - 1] || '');
     if (!mark) return;
-    let since = null;
-    if (/신규/.test(mark) && r[H('최초 등록일') - 1] instanceof Date) since = r[H('최초 등록일') - 1];
+    let since = null, limit = MARK_DAYS;
+    if (/신규/.test(mark) && r[H('최초 등록일') - 1] instanceof Date) { since = r[H('최초 등록일') - 1]; limit = NEW_MARK_DAYS; }
     if (/재방문/.test(mark)) {
       const m = String(r[H('메모') - 1] || '').match(/재방문 (\d{4})-(\d{2})-(\d{2})(?![\s\S]*재방문 \d)/);
       if (m) since = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
     }
-    if (since && days(since) > MARK_DAYS) { sh.getRange(M_FIRST + i, H('신규')).clearContent(); n++; }
+    if (since && days(since) > limit) { sh.getRange(M_FIRST + i, H('신규')).clearContent(); n++; }
   });
   if (n) Logger.log('신규 · 재방문 표시 ' + n + '개를 지웠어요');
 }
@@ -222,8 +227,9 @@ function pickupCascade_(ss, sh, row, newPickup) {
   const code = String(sh.getRange(row, 1).getValue() || '').trim();
   if (!code) return;
   const dataSh = ss.getSheetByName(typeof SC !== 'undefined' ? SC.DATA : '일정');
-  if (!dataSh || dataSh.getLastRow() < 2) return;
-  const n = dataSh.getLastRow() - 1;
+  const last = dataSh && typeof scRealLastRow_ === 'function' ? scRealLastRow_(dataSh, 1) : (dataSh ? dataSh.getLastRow() : 0);
+  if (!dataSh || last < 2) return;
+  const n = last - 1;
   const dates = dataSh.getRange(2, 1, n, 1).getValues();
   const codes = dataSh.getRange(2, 2, n, 1).getValues();
   const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -293,8 +299,15 @@ function bulkDeactivate() { bulkMove_(ACTIVE, '비활성', ''); }
 function bulkActivate() { bulkMove_(INACTIVE, '활성', '🔁 재방문'); }
 
 // 회원 줄 값들 (3행부터)
+// getLastRow()이 예전 서식 흔적 때문에 실제 회원 수보다 훨씬 크게 잡힐 때가 있어요(schedule.gs의 scRealLastRow_랑 같은 문제) —
+// 그 상태로 HEAD.length(여러 칸)를 통째로 읽으면 느려지니, A열(회원번호, 1칸)만 먼저 싸게 읽어서 진짜 마지막 줄을 찾아요
 function memberRows_(sh, cols) {
-  const last = sh.getLastRow();
+  let last = sh.getLastRow();
+  if (last < M_FIRST) return [];
+  if (typeof scRealLastRow_ === 'function') {
+    const real = scRealLastRow_(sh, 1);
+    last = Math.max(real, M_FIRST - 1);   // scRealLastRow_은 2행 기준이라, 회원 탭 시작 줄(M_FIRST)에 맞춰 보정
+  }
   if (last < M_FIRST) return [];
   return sh.getRange(M_FIRST, 1, last - M_FIRST + 1, cols || HEAD.length).getValues();
 }
@@ -419,14 +432,22 @@ function addMemberManual(f) {
   const [y, m, d] = String(f.birth).split('-').map(Number);
   const row = new Array(HEAD.length).fill('');
   const put = (t, v) => { row[H(t) - 1] = v; };
-  const code = nextCode_(ss);
-  put('회원번호', code); put('FirstName', toTitleCase_(f.first)); put('LastName', toTitleCase_(f.last));
-  put('Birthdate', new Date(y, m - 1, d)); put('Nationality', f.nation || 'South Korea'); put('Gender', f.gender); put('PassportNumber', passport);
-  put('Activity', 'Diving'); put('Accomodation', 'House'); put('RoomNumber', 0);
-  put('최초 등록일', new Date()); put('한글 이름', String(f.kname).trim()); put('상태', '활성'); put('신규', '🆕 신규');
-  put('E-mail', f.email || ''); put('연락처', f.tel || ''); put('숙소 · 위치', f.stay || ''); put('픽업', /직접/.test(f.pickup) ? '-' : (f.pickup || ''));
-  put('레벨', f.level || ''); put('총 다이빙', f.logs || ''); put('신청 종류', '샵에서 직접 등록'); put('메모', f.memo || '');
-  writeTopRow_(ss.getSheetByName(ACTIVE), row, null);
+  // activateFormRow_랑 같은 이유 — 회원번호를 뽑는 동안 다른 등록이 끼어들지 않게 잠가요(같은 문서 잠금이라 폼 활성화랑도 서로 순서를 지켜요)
+  const codeLock = LockService.getDocumentLock();
+  codeLock.waitLock(30000);
+  let code;
+  try {
+    code = nextCode_(ss);
+    put('회원번호', code); put('FirstName', toTitleCase_(f.first)); put('LastName', toTitleCase_(f.last));
+    put('Birthdate', new Date(y, m - 1, d)); put('Nationality', f.nation || 'South Korea'); put('Gender', f.gender); put('PassportNumber', passport);
+    put('Activity', 'Diving'); put('Accomodation', 'House'); put('RoomNumber', 0);
+    put('최초 등록일', new Date()); put('한글 이름', String(f.kname).trim()); put('상태', '활성'); put('신규', '🆕 신규');
+    put('E-mail', f.email || ''); put('연락처', f.tel || ''); put('숙소 · 위치', f.stay || ''); put('픽업', /직접/.test(f.pickup) ? '-' : (f.pickup || ''));
+    put('레벨', f.level || ''); put('총 다이빙', f.logs || ''); put('신청 종류', '샵에서 직접 등록'); put('메모', f.memo || '');
+    writeTopRow_(ss.getSheetByName(ACTIVE), row, null);
+  } finally {
+    codeLock.releaseLock();
+  }
   return f.kname + ' (' + code + ') 회원을 활성 회원 맨 위에 넣었어요.';
 }
 
@@ -485,14 +506,15 @@ var NIGHT_CHOICE = ['예, 나이트다이빙도 할래요'];
 var PKG_ITEMS = ['펀다이빙 10회 패키지', '펀다이빙 20회 패키지', '펀다이빙 한 달 무제한'];
 var COURSES = ['오픈워터', '오픈워터 + 어드밴스드', '세미 오픈워터 (오래 쉬었을 때 리마인드)', '어드밴스드', 'EFR', '레스큐',
   '마스터 (다이브마스터)', 'IDC (강사)', '스페셜티 · Deep', '스페셜티 · Nitrox', '트레이닝 · Kick', '트레이닝 · SMB', '트레이닝 · Buoyancy'];
-// 교육 과정 체크박스로 여러 개 고르면, 이 중 레벨이 가장 낮은 과정 하나만 날짜 있는 진짜 일정(primary)이 되고 나머지는 날짜 미정으로 추가돼요.
-// 스페셜티 · 트레이닝은 순차적인 레벨이 아니라 애드온이라 여기 안 넣어요 — 항상 "나머지" 취급(primary가 될 메인 과정이 하나라도 있으면)
-var COURSE_LEVEL = { '오픈워터': 1, '오픈워터 + 어드밴스드': 1, '세미 오픈워터 (오래 쉬었을 때 리마인드)': 1, '어드밴스드': 2, 'EFR': 3, '레스큐': 3, '마스터 (다이브마스터)': 4, 'IDC (강사)': 4 };
-// list: 폼에서 체크한 교육 과정들(한글 이름) → { primary: 첫 일정 자동 생성할 과정 1개, rest: 나머지(날짜 미정으로 추가) }
+// 교육 과정 체크박스로 여러 개 고르면, 순서가 있는 과정(오픈워터 → 어드밴스드 → EFR → 레스큐)은 신청한 첫 날짜부터
+// 레벨 순서대로 날짜를 이어 붙여서(한 과정 끝난 다음 날부터 다음 과정 시작) 전부 진짜 일정으로 만들어요.
+// 마스터 · 인스트럭터 · 스페셜티 · 트레이닝은 순서가 있는 게 아니라 애드온이라 여기 안 넣어요 — 항상 날짜 미정으로 추가돼요(샵에서 직접 날짜를 잡아요)
+var COURSE_LEVEL = { '오픈워터': 1, '오픈워터 + 어드밴스드': 1, '세미 오픈워터 (오래 쉬었을 때 리마인드)': 1, '어드밴스드': 2, 'EFR': 3, '레스큐': 3 };
+// list: 폼에서 체크한 교육 과정들(한글 이름) → { sequential: 레벨 순서대로 날짜를 이어 붙일 과정들, pending: 날짜 미정으로 둘 과정들 }
 function courseSplit_(list) {
-  const main = list.filter(c => COURSE_LEVEL[c] != null);
-  const primary = main.length ? main.reduce((a, b) => COURSE_LEVEL[b] < COURSE_LEVEL[a] ? b : a) : (list[0] || '');
-  return { primary, rest: list.filter(c => c !== primary) };
+  const sequential = list.filter(c => COURSE_LEVEL[c] != null).sort((a, b) => COURSE_LEVEL[a] - COURSE_LEVEL[b]);
+  const pending = list.filter(c => COURSE_LEVEL[c] == null);
+  return { sequential, pending };
 }
 var PICKUPS = ['Coffee Corner', 'Tranquilo', 'Coral Coast', 'El Salam', '1000 mart', 'Gmart', 'German', '샵으로 직접 갈게요', '잘 모르겠어요 (숙소 보고 정해 주세요)'];
 var LEVELS = ['Open Water', 'Advanced', 'Rescue', 'Divemaster', 'Instructor'];
@@ -752,9 +774,10 @@ function activateFormRow_(sh, activateRow) {
     .flatMap(u => u.split(',').map(s => s.trim()).filter(Boolean)).join(', ');
 
   const kind = String(get(FQ.kind));
-  // 교육 과정은 체크박스라 여러 개 골랐으면 쉼표로 묶여서 와요 — 그 중 가장 낮은 레벨 하나만 날짜 있는 일정(course)이 되고 나머지(extraCourses)는 날짜 미정으로 들어가요
+  // 교육 과정은 체크박스라 여러 개 골랐으면 쉼표로 묶여서 와요 — 순서 있는 과정(sequential)은 전부 날짜를 이어 붙이고, 나머지(pending)는 날짜 미정으로 들어가요
   const courseList = String(get(FQ.course)).split(',').map(s => s.trim()).filter(Boolean);
-  const { primary: course, rest: extraCourses } = courseSplit_(courseList);
+  const { sequential, pending } = courseSplit_(courseList);
+  const course = sequential[0] || pending[0] || '';   // 레벨 · 신청종류 텍스트 등 아래에서 "대표 과정 하나"가 필요할 때 써요
   const product = /^교육/.test(kind) ? courseList.join(', ') : kind === '체험다이빙' ? '체험다이빙' : String(get(FQ.pkg) || '');
   const beginner = kind === '체험다이빙' || courseList.some(c => /^오픈워터/.test(c)) || String(get(FQ.agency)).indexOf('자격증 없음') === 0;
   let pickup = String(get(FQ.pickup));
@@ -766,29 +789,36 @@ function activateFormRow_(sh, activateRow) {
 
   const row = new Array(HEAD.length).fill('');
   const put = (t, v) => { row[H(t) - 1] = v; };
-  put('회원번호', nextCode_(ss));
-  put('FirstName', toTitleCase_(get(FQ.first))); put('LastName', toTitleCase_(get(FQ.lname)));
-  put('Birthdate', get(FQ.birth)); put('Nationality', String(get(FQ.nation))); put('Gender', String(get(FQ.gender)));
-  put('PassportNumber', String(get(FQ.passport)).trim().toUpperCase()); put('Activity', 'Diving'); put('Accomodation', 'House'); put('RoomNumber', 0);
-  put('최초 등록일', vals[0] instanceof Date ? vals[0] : new Date()); put('한글 이름', String(get(FQ.kname)).trim());
-  put('상태', '활성'); put('신규', '🆕 신규');
-  put('E-mail', get(FQ.email)); put('연락처', get(FQ.tel)); put('카카오톡 아이디', get(FQ.kakao)); put('숙소 · 위치', get(FQ.stay)); put('픽업', pickup);
-  const impliedLevel = beginner ? '자격 없음' : course === '어드밴스드' ? 'Open Water' : course === '레스큐' ? 'Advanced' : '';
-  put('레벨', get(FQ.level) || impliedLevel); put('발급 단체', /자격증 없음/.test(String(get(FQ.agency))) ? '' : get(FQ.agency));
-  put('총 다이빙', get(FQ.logs)); put('마지막 다이빙', get(FQ.lastDive));
-  put('신청 종류', kind + (product && product !== kind ? ' · ' + product : '') + (day instanceof Date ? ' · 첫 다이빙 ' + Utilities.formatDate(day, tz, 'MM-dd') : ''));
-  put('여권 사본', files('여권 사본')); put('자격증', files('자격증')); put('증명사진', files('증명사진'));
-  put('메디컬', med.length ? med.join(' / ') + (get(FQ.medDetail) ? ' · ' + get(FQ.medDetail) : '') : '');
-  put('주소', get(FQ.address)); put('영문 주소', get(FQ.enAddress));
-  put('메모', [night ? '🌙 나이트다이빙 신청 — 손님 컨택 필요' : '', get(FQ.friends) ? '일행: ' + get(FQ.friends) : '', get(FQ.memo)].filter(String).join('\n'));
-
+  // 활성화 버튼을 연달아(또는 거의 동시에) 누르면, "회원번호 다음 숫자 읽기"와 "그 번호로 줄 쓰기" 사이에 다른 활성화가 끼어들어서
+  // 똑같은 번호를 읽어가 두 손님이 같은 회원번호로 등록될 수 있어요 — 그 구간만 잠가서 한 번에 한 사람씩만 번호를 뽑게 해요
   const active = ss.getSheetByName(ACTIVE);
-  writeTopRow_(active, row, null);
+  const codeLock = LockService.getDocumentLock();
+  codeLock.waitLock(30000);
+  try {
+    put('회원번호', nextCode_(ss));
+    put('FirstName', toTitleCase_(get(FQ.first))); put('LastName', toTitleCase_(get(FQ.lname)));
+    put('Birthdate', get(FQ.birth)); put('Nationality', String(get(FQ.nation))); put('Gender', String(get(FQ.gender)));
+    put('PassportNumber', String(get(FQ.passport)).trim().toUpperCase()); put('Activity', 'Diving'); put('Accomodation', 'House'); put('RoomNumber', 0);
+    put('최초 등록일', vals[0] instanceof Date ? vals[0] : new Date()); put('한글 이름', String(get(FQ.kname)).trim());
+    put('상태', '활성'); put('신규', '🆕 신규');
+    put('E-mail', get(FQ.email)); put('연락처', get(FQ.tel)); put('카카오톡 아이디', get(FQ.kakao)); put('숙소 · 위치', get(FQ.stay)); put('픽업', pickup);
+    const impliedLevel = beginner ? '자격 없음' : course === '어드밴스드' ? 'Open Water' : course === '레스큐' ? 'Advanced' : '';
+    put('레벨', get(FQ.level) || impliedLevel); put('발급 단체', /자격증 없음/.test(String(get(FQ.agency))) ? '' : get(FQ.agency));
+    put('총 다이빙', get(FQ.logs)); put('마지막 다이빙', get(FQ.lastDive));
+    put('신청 종류', kind + (product && product !== kind ? ' · ' + product : '') + (day instanceof Date ? ' · 첫 다이빙 ' + Utilities.formatDate(day, tz, 'MM-dd') : ''));
+    put('여권 사본', files('여권 사본')); put('자격증', files('자격증')); put('증명사진', files('증명사진'));
+    put('메디컬', med.length ? med.join(' / ') + (get(FQ.medDetail) ? ' · ' + get(FQ.medDetail) : '') : '');
+    put('주소', get(FQ.address)); put('영문 주소', get(FQ.enAddress));
+    put('메모', [night ? '🌙 나이트다이빙 신청 — 손님 컨택 필요' : '', get(FQ.friends) ? '일행: ' + get(FQ.friends) : '', get(FQ.memo)].filter(String).join('\n'));
+    writeTopRow_(active, row, null);
+  } finally {
+    codeLock.releaseLock();
+  }
   // 스케줄 파일(스케줄.gs)이 있으면 첫 다이빙 날 일정도 같이 넣어요
   let scheduleWarn = '';
   if (typeof addFormEntry_ === 'function') {
     try {
-      addFormEntry_({ code: row[0], name: row[H('한글 이름') - 1], pickup, kind, course, extraCourses, pkg: String(get(FQ.pkg) || ''), night, day });
+      addFormEntry_({ code: row[0], name: row[H('한글 이름') - 1], pickup, kind, course, sequential, pending, pkg: String(get(FQ.pkg) || ''), night, day });
       // 일정이 들어간 김에 이론교육 리스트도 바로 갱신 — "스케줄 만들기"를 따로 안 눌러도 활성화하자마자 반영돼요
       if (typeof theoryRefresh_ === 'function') { try { theoryRefresh_(ss); } catch (e) { Logger.log('이론교육 리스트 갱신 실패: ' + e.message); } }
     }

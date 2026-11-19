@@ -1,7 +1,7 @@
 /**
  * 이론교육 발송 리스트 — 일정(스케줄) 코드와 같이 써요 (Apps Script에 "이론교육"이라는 이름으로 새 파일 하나 더 만들어 붙여 넣어요)
- * 회원이 "첫 교육"(생애 첫 자격증 과정)을 시작하면, 그 교육 시작일 3주 전까지 이론 교육을 보내줘야 해요.
- * buildSchedule()을 누를 때마다(= 홈에서 "스케줄 만들기") 일정 탭을 훑어서, 아직 이 탭에 없는 "첫 교육" 예정자를 자동으로 한 줄씩 추가해요.
+ * 오픈워터 · 어드밴스드 일정이 잡히면(재신청이든 처음이든 상관없이) 그 교육 시작일 3주 전까지 이론 교육을 보내줘야 해요.
+ * buildSchedule()을 누를 때마다(= 홈에서 "스케줄 만들기") 일정 탭을 훑어서, 아직 이 탭에 없는 예정자를 자동으로 한 줄씩 추가해요.
  *
  * 이론교육 탭에서 직접 적는 건(노란색) 발송완료 체크 · 메모 — 나머지(회원번호 · 이름 · 과정 · 교육 시작일 · 발송 기한)는 자동으로 채워져요
  * 발송완료를 체크하면 발송일이 오늘 날짜로 자동 기록돼요(체크 해제하면 발송일도 같이 지워져요) — members.gs의 onEdit()이 불러요
@@ -58,14 +58,26 @@ function theorySetupConditionalFormat_(sh) {
 
 function theoryRefresh_(ss) {
   const sh = ss.getSheetByName(THEORY) || setupTheorySheet();
-  // 이론교육이 필요 없는 과정(THEORY_COURSES에 없는 것)으로 전에 잘못 들어가 있던 줄은 지워요 — 밑에서부터 지워야 줄 번호가 안 밀려요
+  // Family(가족/지인 — 강사는 아니지만 백업으로 다이빙 도와주는 회원) 체크된 회원번호를 미리 모아둬요 —
+  // 이론교육 대상에서 빼는 용도로 아래 두 군데(기존 줄 정리 · 새 후보 거르기)에서 같이 써요
+  const familyCodes_ = {};
+  [ACTIVE, INACTIVE].forEach(n => {
+    const sh2 = ss.getSheetByName(n);
+    if (!sh2) return;
+    memberRows_(sh2).forEach(r => {
+      const code = String(r[0] || '').trim();
+      if (code && r[H('Family') - 1] === true) familyCodes_[code] = true;
+    });
+  });
+  // 이론교육이 필요 없는 과정(THEORY_COURSES에 없는 것)이거나 Family 회원인데 전에 잘못 들어가 있던 줄은 지워요 — 밑에서부터 지워야 줄 번호가 안 밀려요
   {
     const last0 = sh.getLastRow();
     if (last0 > 1) {
-      const types = sh.getRange(2, 3, last0 - 1, 1).getValues();
-      for (let i = types.length - 1; i >= 0; i--) {
-        const t = String(types[i][0] || '').trim();
-        if (t && !THEORY_COURSES.has(t)) sh.deleteRow(i + 2);
+      const rows0 = sh.getRange(2, 1, last0 - 1, 3).getValues();
+      for (let i = rows0.length - 1; i >= 0; i--) {
+        const code = String(rows0[i][0] || '').trim();
+        const t = String(rows0[i][2] || '').trim();
+        if ((t && !THEORY_COURSES.has(t)) || familyCodes_[code]) sh.deleteRow(i + 2);
       }
     }
   }
@@ -88,24 +100,18 @@ function theoryRefresh_(ss) {
     return info ? info.name : raw;
   };
 
-  // 한 번 훑으면서: (1) 회원번호별 "앞으로 할, 이론이 필요한 교육" 중 가장 빠른 날짜(= 후보) (2) 회원번호별 "이론이 필요한 교육" 날짜를 전부(과거 포함) 모아요
-  // — 교육은 하루짜리가 아니라서(OW면 4일 등) 같은 과정이 날짜만 다르게 여러 줄로 들어있는 게 정상이라, "날짜가 여러 개"가 아니라
-  //   "후보보다 먼저인 날짜가 있는지"로 첫 교육인지를 가려요 (안 그러면 여러 날짜짜리 과정이 전부 "첫 교육 아님"으로 잘못 걸러져요)
-  const candidates = {}, allDates = {};
+  // 회원번호별로 "앞으로 할, 이론이 필요한 교육" 중 가장 빠른 날짜를 후보로 잡아요 — 첫 교육인지 재신청인지는 안 가려요(오픈워터 · 어드밴스드면 무조건 대상)
+  // 교육은 하루짜리가 아니라서(OW면 4일 등) 같은 과정이 날짜만 다르게 여러 줄로 들어있는 게 정상이라, 그 중 제일 빠른 날짜만 후보로 써요
+  const candidates = {};
   vals.forEach(r => {
     const date = r[0], code = String(r[1] || '').trim(), name = String(r[2] || '').trim(), cat = String(r[3] || '').trim();
     const type = resolveType_(String(r[4] || '').trim());
     if (!code || !(date instanceof Date) || cat !== '교육' || !THEORY_COURSES.has(type)) return;
-    (allDates[code] = allDates[code] || []).push(date);
-    if (scFmt_(date) < todayKey) return;   // 이미 지난 교육은 후보가 될 수 없어요(앞으로 할 교육만 챙겨요) — allDates에는 위에서 이미 넣었어요
+    if (scFmt_(date) < todayKey) return;   // 이미 지난 교육은 후보가 될 수 없어요(앞으로 할 교육만 챙겨요)
     const cur = candidates[code];
     if (!cur || date < cur.date) candidates[code] = { code, name, type, date };
   });
-  // 후보 날짜보다 "진짜로 더 이른" 교육 날짜가 하나라도 있으면(과거든, 더 이른 미래 예약이든) 첫 교육이 아니에요
-  Object.keys(candidates).forEach(code => {
-    const c = candidates[code];
-    if (allDates[code].some(d => d.getTime() < c.date.getTime())) delete candidates[code];
-  });
+  Object.keys(familyCodes_).forEach(code => delete candidates[code]);   // Family 회원은 새 후보에서도 빼요
   if (!Object.keys(candidates).length) return;
 
   const last = sh.getLastRow();

@@ -267,13 +267,24 @@ var scFmt_ = (d, f) => Utilities.formatDate(new Date(d), SpreadsheetApp.getActiv
 var scMinutes_ = t => { const m = String(t).match(/(\d+):(\d+)\s*(am|pm)?/i); return m ? (Number(m[1]) % 12 + (/pm/i.test(m[3] || '') ? 12 : 0)) * 60 + Number(m[2]) : 9999; };
 var scIsShop_ = p => !p || /^-+$/.test(String(p).trim()) || /직접/.test(p);
 
+// getLastRow()은 예전에 지웠던 서식 · 테두리가 아래쪽에 남아있으면 실제 데이터보다 훨씬 크게 잡힐 때가 있어요(buildSchedule 주석 참고)
+// → 그 상태로 getValues(15칸)를 돌리면 쓸데없이 느려지니, A열(1칸)만 먼저 싸게 읽어서 진짜 마지막 데이터 줄을 찾아요
+function scRealLastRow_(sh, col) {
+  const last = sh.getLastRow();
+  if (last < 2) return last;
+  const v = sh.getRange(2, col || 1, last - 1, 1).getValues();
+  for (let i = v.length - 1; i >= 0; i--) if (String(v[i][0]).trim()) return i + 2;
+  return 1;
+}
+
 // 일정 탭 → { 'yyyy-MM-dd': [ {code, name, label, time, guide, pickup} ] }
 // 일정 탭 전체를 한 번만 읽어서 재사용해요 (실행 한 번 안에서 여러 번 불러도 시트는 한 번만 읽어요 — 전에 느렸던 큰 원인)
 var SC_ROWS_CACHE_ = null;
 function scRawRows_(ss) {
   if (SC_ROWS_CACHE_) return SC_ROWS_CACHE_;
   const sh = ss.getSheetByName(SC.DATA);
-  SC_ROWS_CACHE_ = (!sh || sh.getLastRow() < 2) ? [] : sh.getRange(2, 1, sh.getLastRow() - 1, SC_HEAD.length).getValues();
+  const last = sh ? scRealLastRow_(sh, 1) : 0;
+  SC_ROWS_CACHE_ = (!sh || last < 2) ? [] : sh.getRange(2, 1, last - 1, SC_HEAD.length).getValues();
   return SC_ROWS_CACHE_;
 }
 
@@ -305,6 +316,16 @@ var SC_TRAINING_COURSES = new Set(['EFR', 'Rescue', 'EFR / Rescue', 'Deep Specia
 
 // 종류(E열)가 설정 탭에 등록 안 된 글자(사이트 2~3개를 붙이거나 "또는"으로 묶은 경우 등)일 때, 카테고리(D열)를 보고 종류를 맞춰요 (기본은 펀다이빙)
 var SC_CAT_KIND_HINT = { '교육': 'Course', '펀다이빙': 'Fun', '보트다이빙': 'Boat', '나이트다이빙': 'Night', '체험다이빙': 'Course', '기타': 'Other', '셋업': 'Setup' };
+
+// 일정 탭 한 줄(카테고리 · 종류 · 사이트)을 보고 "종류(kind: Fun/Boat/Course/Night 등)"와 정식 이름을 돌려줘요.
+// 패키지 처리 · 회원 이력 조회처럼 "대충 Fun/Boat/Course 정도만 알면 되는" 간단한 조회에서 써요 — 전에는 pkgAddConsumptionDialog · getMemberHistory가 각자 따로
+// 거의 똑같은 코드를 짜놨었는데, 여기 하나로 합쳤어요. (스케줄표를 실제로 그리는 scGroup_()은 색깔 · 안내문 · "+"로 묶인 사이트까지 더 많이 다뤄야 해서 따로예요 — 안 건드렸어요)
+function scKindOf_(cat, type, site, S) {
+  const label = scSynthLabel_(cat, type, site);
+  const info = S.labels[scNorm_(label)];
+  const kind = info ? info.kind : (SC_CAT_KIND_HINT[String(cat || '').trim()] || 'Fun');
+  return { kind, name: info ? info.name : label, label };
+}
 
 // 같은 약어 · 시간 · 강사끼리 한 팀
 // 설정 탭에 없는 종류(두 사이트를 "Canyon+Coral Garden"처럼 붙여 적은 경우 등)는
@@ -790,6 +811,7 @@ function scReadHomeTable_(ss, date) {
     const r = v[i];
     if (String(r[0]).indexOf('■') === 0) break;                 // 픽업 요약부터는 표가 아니에요
     if (String(r[0]).indexOf('이날 일정') === 0) break;
+    if (String(r[0]).indexOf('*') === 0) break;                 // "*패키지에는..." 안내 문구 줄 — 표가 끝났다는 뜻이에요 (이걸 안 거르면 이미지에 빈 줄로 섞여 들어가요)
     if (!r.join('').trim()) { g = null; continue; }              // 팀 사이 빈 줄
     if (r[0]) {
       const fun = /^(Fun|Night|Boat|Check) Diving$/.test(r[0]) || SC_TRAINING_COURSES.has(String(r[0]).trim());   // Check Diving · EFR · 레스큐 · 스페셜티 · 트레이닝도 펀다 이미지에서 안 빠지게
@@ -1304,11 +1326,14 @@ function openHistoryDialog() {
   });
   const t = HtmlService.createTemplate(SC_HISTORY_HTML);
   t.data = JSON.stringify({ people });
-  SpreadsheetApp.getUi().showModalDialog(t.evaluate().setWidth(440).setHeight(560), '회원 이력 조회');
+  SpreadsheetApp.getUi().showModalDialog(t.evaluate().setWidth(620).setHeight(760), '회원 이력 조회');
 }
 
 // 회원번호로 일정 탭 전체를 훑어서 이력 · 횟수를 돌려줘요 (다이얼로그에서 google.script.run 으로 불러요)
-function getMemberHistory_(code) {
+// 이름 끝에 _를 안 붙여요 — google.script.run은 밑줄로 끝나는 함수는 "비공개"로 보고 클라이언트에서 아예 못 불러요(이게 안 되던 진짜 원인이었어요)
+function getMemberHistory(code) {
+  // 어디서 느려지는지 몰라서 일단 단계별로 시간을 재서 실행 기록(Executions)에 남겨요 — 느려지면 이 로그로 원인을 바로 찾을 수 있어요
+  const t0 = Date.now();
   const ss = SpreadsheetApp.getActive();
   let pkg = { type: '', remain: '' };
   if (typeof pkgFindRowByCode_ === 'function') {
@@ -1318,28 +1343,30 @@ function getMemberHistory_(code) {
       pkg = { type: String(psh.getRange(pkgRow, 3).getValue() || ''), remain: String(psh.getRange(pkgRow, 9).getValue() || '') };   // 종류 · 잔여 횟수 (패키지 탭)
     }
   }
+  Logger.log('[이력조회] 패키지 조회 ' + (Date.now() - t0) + 'ms');
   const S = scReadSettings_(ss);
+  Logger.log('[이력조회] 설정 읽기 ' + (Date.now() - t0) + 'ms');
   const rows = scRawRows_(ss);
+  Logger.log('[이력조회] 일정 ' + rows.length + '줄 읽기 ' + (Date.now() - t0) + 'ms');
   const items = [];
   rows.forEach(r => {
     if (String(r[1] || '').trim() !== code) return;
     if (!(r[0] instanceof Date) || !r[4]) return;
-    const label = scSynthLabel_(r[3], r[4], r[5]);
-    const info = S.labels[scNorm_(label)];
-    const name = info ? info.name : label;
-    const kind = name === 'DSD' ? 'Dsd' : (info ? info.kind : 'Fun');
+    const { kind: baseKind, name } = scKindOf_(r[3], r[4], r[5], S);
+    const kind = name === 'DSD' ? 'Dsd' : baseKind;
     items.push({ date: scFmt_(r[0]), name, kind, time: scTime_(r[6]), guide: String(r[7] || '').trim() });
   });
   items.sort((a, b) => b.date.localeCompare(a.date));
   const counts = { Course: 0, Fun: 0, Boat: 0, Night: 0, Dsd: 0 };
   items.forEach(it => { counts[it.kind] = (counts[it.kind] || 0) + 1; });
+  Logger.log('[이력조회] 전체 끝 ' + (Date.now() - t0) + 'ms · 이 회원 일정 ' + items.length + '건');
   return { total: items.length, diveCount: counts.Fun + counts.Boat + counts.Night, counts, items, pkg };
 }
 
 var SC_HISTORY_HTML = `<!doctype html><html><head><base target="_top"><style>
 body{font-family:-apple-system,'Apple SD Gothic Neo',sans-serif;font-size:14px;color:#1F2A30;margin:0;padding:2px}
 input{box-sizing:border-box;padding:7px;border:1px solid #B7C7CC;border-radius:8px;font-size:14px;width:100%}
-#list{max-height:170px;overflow:auto;border:1px solid #E1E8EB;border-radius:8px;margin-top:6px}
+#list{max-height:220px;overflow:auto;border:1px solid #E1E8EB;border-radius:8px;margin-top:6px}
 .p{display:flex;gap:8px;align-items:center;padding:6px 8px;border-bottom:1px solid #F0F3F4;cursor:pointer}.p small{color:#7A8A92}
 .p:hover{background:#F4F8F6}
 .sum{margin-top:12px;padding:10px;background:#F4F8F6;border-radius:8px;font-size:13px;line-height:1.6}
@@ -1360,20 +1387,45 @@ function draw() {
   $('list').innerHTML = rows.map(p => '<div class="p" data-c="' + p.code + '" data-n="' + (p.name || p.en) + '"><b>' + (p.name || p.en) + '</b> <small>' + p.en + ' · ' + p.code + '</small></div>').join('') || '<div class="p"><small>못 찾았어요.</small></div>';
   document.querySelectorAll('.p[data-c]').forEach(el => el.onclick = () => pick(el.dataset.c, el.dataset.n));
 }
+// seq로 요청 번호를 매겨서, 사람을 연달아 빠르게 눌렀을 때 먼저 누른 느린 응답이 나중에 와서 화면을 덮어쓰는 걸 막아요
+// timer로 20초 넘게 응답이 없으면 "오래 걸려요" 메시지를 띄워요 — 전에는 끝까지 "불러오는 중..."에 멈춰 있어서 멈춘 줄 알기 쉬웠어요
+var pickSeq_ = 0;
 function pick(code, label) {
+  var seq = ++pickSeq_;
   $('result').innerHTML = '<div class="sum">불러오는 중...</div>';
+  var timer = setTimeout(() => {
+    if (seq !== pickSeq_) return;
+    $('result').innerHTML = '<div class="sum">응답이 너무 오래 걸려요 — 일정 탭이 커서 그럴 수 있어요. 잠시 후 다시 눌러주세요.</div>';
+  }, 20000);
+  // 요청 자체가 서버로 가기 전에(브라우저 쪽에서) 뭔가 막히면 아무 에러도 안 뜨고 타임아웃만 뜨는 게 이상해서,
+  // google.script.run 호출 자체를 try/catch로 감싸서 그 경우도 화면에 바로 보이게 해요
+  try {
   google.script.run.withSuccessHandler(res => {
-    var pkgLine = '';
-    if (res.pkg && res.pkg.type) {
-      pkgLine = '<br>📦 ' + res.pkg.type + ' · 남은 횟수 ' + (res.pkg.remain || '-');
+    clearTimeout(timer);
+    if (seq !== pickSeq_) return;
+    try {
+      var pkgLine = '';
+      if (res.pkg && res.pkg.type) {
+        pkgLine = '<br>📦 ' + res.pkg.type + ' · 남은 횟수 ' + (res.pkg.remain || '-');
+      }
+      $('result').innerHTML =
+        '<div class="sum"><b>' + label + '</b> (' + code + ')' + pkgLine + '<br>' +
+        '우리 샵 다이빙(펀 · 보트 · 나이트) <b>' + res.diveCount + '</b>회 · 교육 ' + res.counts.Course + '회 · 체험 ' + res.counts.Dsd + '회 · 전체 일정 ' + res.total + '건</div>' +
+        '<table><tr><th>날짜</th><th>종류</th><th>시간</th><th>강사</th></tr>' +
+        res.items.slice(0, 60).map(it => '<tr><td>' + it.date + '</td><td>' + it.name + '</td><td>' + it.time + '</td><td>' + (it.guide || '') + '</td></tr>').join('') +
+        '</table>';
+    } catch (err) {
+      $('result').innerHTML = '<div class="sum">결과를 표시하다 오류가 났어요: ' + err.message + '</div>';
     }
-    $('result').innerHTML =
-      '<div class="sum"><b>' + label + '</b> (' + code + ')' + pkgLine + '<br>' +
-      '우리 샵 다이빙(펀 · 보트 · 나이트) <b>' + res.diveCount + '</b>회 · 교육 ' + res.counts.Course + '회 · 체험 ' + res.counts.Dsd + '회 · 전체 일정 ' + res.total + '건</div>' +
-      '<table><tr><th>날짜</th><th>종류</th><th>시간</th><th>강사</th></tr>' +
-      res.items.slice(0, 60).map(it => '<tr><td>' + it.date + '</td><td>' + it.name + '</td><td>' + it.time + '</td><td>' + (it.guide || '') + '</td></tr>').join('') +
-      '</table>';
-  }).withFailureHandler(e => { $('result').innerHTML = '<div class="sum">오류: ' + e.message + '</div>'; }).getMemberHistory_(code);
+  }).withFailureHandler(e => {
+    clearTimeout(timer);
+    if (seq !== pickSeq_) return;
+    $('result').innerHTML = '<div class="sum">오류: ' + e.message + '</div>';
+  }).getMemberHistory(code);
+  } catch (syncErr) {
+    clearTimeout(timer);
+    $('result').innerHTML = '<div class="sum">요청을 보내다 바로 오류가 났어요: ' + syncErr.message + '</div>';
+  }
 }
 $('q').oninput = draw;
 </script></body></html>`;
@@ -1634,24 +1686,32 @@ function addFormEntry_(f) {
   if (!(f.day instanceof Date)) throw new Error('날짜 응답이 비어있거나 날짜 형식이 아니에요 (받은 값: "' + f.day + '")');
   const ss = SpreadsheetApp.getActive();
   const sh = scData_(ss);
-  const addDays = n => { const d = new Date(f.day); d.setDate(d.getDate() + n); return d; };
+  const addDaysFrom = (base, n) => { const d = new Date(base); d.setDate(d.getDate() + n); return d; };
   const rows = [];
-  const pendingRowIdx = [];   // rows 안에서 "날짜 미정" 줄 인덱스 — 나중에 진한 노란색으로 따로 칠해요 (체크박스로 교육 과정 여러 개 신청했을 때)
+  const pendingRowIdx = [];   // rows 안에서 "날짜 미정" · "사이트 미정" 줄 인덱스 — 나중에 진한 노란색으로 따로 칠해요(아직 채워야 할 게 있다는 표시)
   // 펀다이빙 계열은 종류(E열)가 "-" 고정이고, 실제 사이트(아직 안 정했으면 "Fun Diving"·"Night Diving" 같은 기본값)는 F열(다이빙 사이트)에 들어가요
-  const siteRow = (site, memo) => scPadRow_([f.day, f.code, f.name, '펀다이빙', '-', site, '', '', f.pickup || '', memo, '폼', '', false, '']);
+  // "Fun Diving"처럼 사이트가 아직 진짜로 안 정해진 기본값 줄이라, pendingRowIdx에도 같이 넣어서 진한 노란색으로 표시해요
+  const siteRow = (site, memo) => { pendingRowIdx.push(rows.length); return scPadRow_([f.day, f.code, f.name, '펀다이빙', '-', site, '', '', f.pickup || '', memo, '폼', '', false, '']); };
 
   if (/^교육/.test(f.kind)) {
-    // 교육: 과정 길이만큼 연속된 날짜로 다 넣어요 (시간은 비워 둬서 나중에 정해요)
-    const label = COURSE_LABEL[f.course] || f.course;
-    const days = COURSE_DAYS[f.course] || 1;
-    for (let i = 0; i < days; i++) {
-      rows.push([addDays(i), f.code, f.name, '교육', label, '', '', '', f.pickup || '',
-        '폼 신청 · 시간 정하기' + (days > 1 ? ' (' + (i + 1) + '/' + days + '일차)' : ''), '폼']);
-    }
-    // 체크박스로 과정을 여러 개 골랐으면, 가장 낮은 레벨 하나(위) 말고 나머지는 날짜를 비워 둔 채로 넣어요 — 샵에서 날짜를 직접 정해줘야 해요
-    (f.extraCourses || []).forEach(c => {
+    // 교육: 순서 있는 과정(오픈워터 → 어드밴스드 → EFR → 레스큐, sequential)은 신청한 날짜부터 레벨 순서대로
+    // 날짜를 이어 붙여서(한 과정이 끝난 바로 다음 날부터 다음 과정 시작) 전부 날짜 있는 진짜 일정으로 넣어요
+    let cursor = f.day;
+    const seqList = (f.sequential && f.sequential.length) ? f.sequential : [f.course];
+    seqList.forEach(c => {
+      const label = COURSE_LABEL[c] || c;
+      const days = COURSE_DAYS[c] || 1;
+      for (let i = 0; i < days; i++) {
+        rows.push([addDaysFrom(cursor, i), f.code, f.name, '교육', label, '', '', '', f.pickup || '',
+          '폼 신청 · 시간 정하기' + (days > 1 ? ' (' + (i + 1) + '/' + days + '일차)' : ''), '폼']);
+      }
+      cursor = addDaysFrom(cursor, days);   // 다음 과정은 이 과정이 끝난 바로 다음 날부터
+    });
+    // 마스터 · 인스트럭터 · 스페셜티 · 트레이닝(pending)은 며칠짜리인지 정해진 게 아니라 애드온이라 날짜를 확정은 못 짓지만,
+    // 손님이 폼에 적은 희망 시작일(f.day)은 일단 찍어두고 — 진한 노란색으로 표시해서 "이 날짜 맞는지 확인 필요"라고 알려줘요
+    (f.pending || f.extraCourses || []).forEach(c => {
       pendingRowIdx.push(rows.length);
-      rows.push(['', f.code, f.name, '교육', COURSE_LABEL[c] || c, '', '', '', f.pickup || '', '폼 신청 · 날짜 미정 — 일정 잡아야 함', '폼']);
+      rows.push([f.day, f.code, f.name, '교육', COURSE_LABEL[c] || c, '', '', '', f.pickup || '', '폼 신청 · 날짜 확인 필요', '폼']);
     });
   } else if (f.kind === '체험다이빙') {
     rows.push([f.day, f.code, f.name, '체험다이빙', 'DSD', '', '', '', f.pickup || '', '폼 신청 · 시간 정하기', '폼']);
@@ -1662,12 +1722,13 @@ function addFormEntry_(f) {
     if (typeof pkgRegisterFromForm_ === 'function') { try { pkgRegisterFromForm_(f.code, f.pkg, f.day); } catch (e) { Logger.log('패키지 자동 등록 실패: ' + e.message); } }
   } else if (f.kind === KINDS[4]) {
     // 체크다이빙도 카테고리(D열)는 펀다이빙 그대로, 종류(E열)에 "Check Diving" — 사이트는 아직 안 정했으니 F열은 비워 두고 나중에 채워요 (나이트다이빙이랑 똑같은 구조)
+    pendingRowIdx.push(rows.length);
     rows.push(scPadRow_([f.day, f.code, f.name, '펀다이빙', 'Check Diving', '', '', '', f.pickup || '', '폼 신청 · 시간 정하기', '폼', '', false, '']));
-    if (f.night) rows.push(scPadRow_([f.day, f.code, f.name, '펀다이빙', 'Night Diving', '', '', '', f.pickup || '', '폼 신청 · 시간 정하기 · 🌙 손님 컨택 필요', '폼', '', false, '']));
+    if (f.night) { pendingRowIdx.push(rows.length); rows.push(scPadRow_([f.day, f.code, f.name, '펀다이빙', 'Night Diving', '', '', '', f.pickup || '', '폼 신청 · 시간 정하기 · 🌙 손님 컨택 필요', '폼', '', false, ''])); }
   } else {
     rows.push(siteRow('Fun Diving', '폼 신청 · 시간 정하기'));
     // 나이트다이빙은 카테고리(D열) 펀다이빙 그대로, 종류(E열)에 "Night Diving" — 사이트는 아직 안 정했으니 F열은 비워 두고 나중에 채워요
-    if (f.night) rows.push(scPadRow_([f.day, f.code, f.name, '펀다이빙', 'Night Diving', '', '', '', f.pickup || '', '폼 신청 · 시간 정하기 · 🌙 손님 컨택 필요', '폼', '', false, '']));
+    if (f.night) { pendingRowIdx.push(rows.length); rows.push(scPadRow_([f.day, f.code, f.name, '펀다이빙', 'Night Diving', '', '', '', f.pickup || '', '폼 신청 · 시간 정하기 · 🌙 손님 컨택 필요', '폼', '', false, ''])); }
   }
 
   // 맨 아래가 아니라 맨 위(헤더 바로 아래)에 넣어요 — "+ 신청 추가"랑 똑같이, 방금 들어온 폼 신청이 바로 눈에 보이게
